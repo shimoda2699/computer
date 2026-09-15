@@ -1,0 +1,712 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CPUが命令を実行する仕組み（2進数版）</title>
+<style>
+    * {box-sizing: border-box;}
+    body {font-family: Arial, sans-serif;text-align: center;background-color: #f0f0f0;font-size: 13px;margin: 0;padding: 6px 10px;}
+    h1 {font-size: 1.15em;margin: 4px 0;}
+    h2 {margin: 0 0 4px;font-size: 0.95em;}
+    h3 {margin: 6px 0 3px;font-size: 0.82em;}
+    #note {max-width: 900px;margin: 4px auto 0;color: #555;font-size: 0.72em;text-align: left;line-height: 1.35;}
+    .tab-buttons {margin-top: 8px;}
+    .tab-btn {padding: 5px 12px;margin: 0 3px;font-size: 0.85em;border: 1px solid #888;background-color: #e0e0e0;cursor: pointer;border-radius: 4px 4px 0 0;}
+    .tab-btn.active {background-color: #fff;border-bottom: 3px solid #2a6df4;font-weight: bold;}
+    .tab-panel[hidden] {display: none;}
+    .run-controls {display: flex;align-items: center;justify-content: center;gap: 10px;margin: 6px auto 0;padding: 5px 10px;background-color: #eef2ff;border: 1px solid #b9c6f5;border-radius: 4px;max-width: 640px;font-size: 0.8em;}
+    .run-controls input[type="range"] {width: 140px;vertical-align: middle;}
+    #playBtn {padding: 4px 14px;font-size: 0.9em;cursor: pointer;}
+    .panel-note {max-width: 900px;margin: 6px auto 0;color: #444;font-size: 0.72em;text-align: left;background-color: #fffbe6;border: 1px solid #e0d38a;padding: 5px 8px;border-radius: 4px;line-height: 1.35;}
+    .simulation {display: flex;justify-content: center;margin-top: 8px;flex-wrap: wrap;gap: 8px;}
+    .cpu-box, .memory-box {border: 1px solid #000;padding: 8px;margin: 0;background-color: #fff;min-width: 175px;text-align: left;}
+    .cpu-box {display: flex;flex-direction: column;background-color: #e6ffe6;gap: 6px;}
+    .control-unit, .alu-container {border: 1px solid #000;padding: 6px 8px;margin: 0;background-color: #fff;min-width: 165px;}
+    .control-unit {background-color: #ffcccc;}
+    .alu-container {background-color: #cce5ff;}
+    .memory-box {background-color: #f6f9e8;color: #004d00;padding: 8px 10px;font-size: 0.9em;min-width: 230px;}
+    .memory-box .memory-cell {display: flex;align-items: center;justify-content: space-between;border: 1px solid #000;padding: 3px 6px;margin: 2px 0;background-color: #fff;font-size: 0.85em;}
+    .memory-box .address {width: 34px;color: #ff0000;font-weight: bold;}
+    .highlight {animation: blink 1s step-start infinite;}
+    @keyframes blink {50% {background-color: yellow;}}
+    .memory-box .data-input {display: flex;justify-content: space-between;align-items: center;border: 1px solid #000;padding: 3px 6px;margin: 2px 0;background-color: #fff;font-size: 0.85em;gap: 4px;}
+    .memory-box .data-input span:first-child {width: 34px;font-weight: bold;}
+    .memory-box .data-input input, .memory-box .data-input span.mem-out {width: 62px;text-align: right;font-size: 0.95em;}
+    .op-select {font-family: inherit;font-size: 0.85em;padding: 1px;}
+    .register {margin: 3px 0;padding: 3px 6px;border: 1px solid #000;background-color: #f0f0f0;font-size: 0.85em;}
+    .phase-indicator {font-weight: bold;background-color: #fff3cd;}
+    .decoded-info {font-size: 0.78em;background-color: #eef;text-align: left;}
+    .alu {border: 2px solid #000;padding: 8px;margin-top: 4px;text-align: center;font-weight: bold;background-color: #e0e0e0;font-size: 0.9em;}
+    .alu-note {font-size: 0.68em;color: #555;margin: 4px 0 0;text-align: left;line-height: 1.3;}
+    button.step-btn {padding: 5px 14px;margin-top: 6px;margin-left: 6px;font-size: 0.85em;}
+    .button-container {display: flex;justify-content: center;margin-top: 6px;}
+</style>
+</head>
+<body>
+<h1>CPUが命令を実行する仕組み（2進数版）</h1>
+<p id="note">※ このシミュレーションでは命令を分かりやすい文字列（ニーモニック）で表示していますが、実際のコンピュータでは命令もデータと同じように2進数（機械語）としてメモリに格納されています。また、CPUは「フェッチ（取り出し）→デコード（解読）→実行」という手順を1つの命令ごとに繰り返しています。</p>
+
+<div class="tab-buttons">
+    <button id="tabBtnA" class="tab-btn active" onclick="showTab('a')">基本編（分岐なし）</button>
+    <button id="tabBtnB" class="tab-btn" onclick="showTab('b')">応用編：掛け算（ループ・分岐）</button>
+    <button id="tabBtnC" class="tab-btn" onclick="showTab('c')">発展編：割り算（比較・分岐）</button>
+</div>
+
+<div class="run-controls">
+    <span>連続実行の速度：</span>
+    <input type="range" id="speedRange" min="80" max="1200" step="20" value="400" oninput="onSpeedChange()">
+    <span id="speedLabel">400ms/ステップ</span>
+    <button id="playBtn" onclick="togglePlay()">▶ 連続実行</button>
+</div>
+
+<!-- ================= 基本編 ================= -->
+<div id="a_panel" class="tab-panel">
+    <div class="simulation">
+        <div class="cpu-box">
+            <h2>CPU</h2>
+            <div class="control-unit">
+                <h2>制御装置</h2>
+                <div id="a_programCounter" class="register">プログラムカウンタ: <span id="a_pcValue">0</span></div>
+                <div id="a_instructionRegister" class="register">命令レジスタ: <span id="a_irValue"></span></div>
+                <div class="register phase-indicator">フェーズ: <span id="a_phaseValue">-</span></div>
+                <div class="register decoded-info">デコード結果: <span id="a_decodedValue">-</span></div>
+            </div>
+
+            <div class="alu-container">
+                <h2>演算装置</h2>
+                <div id="a_registerA" class="register">レジスタA: <span id="a_valueA">0</span></div>
+                <div id="a_registerB" class="register">レジスタB: <span id="a_valueB">0</span></div>
+                <div id="a_registerC" class="register">レジスタC: <span id="a_valueC">0</span></div>
+                <div id="a_alu" class="alu">ALU <br>（算術論理演算装置）: <span id="a_result">0</span></div>
+                <p class="alu-note">※ ALUは加算・減算などの演算を行うときだけ使われます。READ／WRITE命令はメモリとレジスタの間でデータを転送するだけなので、ALUは使いません。</p>
+            </div>
+        </div>
+
+        <div id="a_memory" class="memory-box">
+            <h2>主記憶装置(メモリ)</h2>
+            <h3>命令格納領域（2番地はADD／SUBを選択できます）</h3>
+            <div class="memory-cell"><span class="address">0</span><span class="instruction">READ A, 100</span></div>
+            <div class="memory-cell"><span class="address">1</span><span class="instruction">READ B, 101</span></div>
+            <div class="memory-cell"><span class="address">2</span><span class="instruction">
+                <select id="a_opSelect" class="op-select">
+                    <option value="ADD A, B">ADD A, B（加算）</option>
+                    <option value="SUB A, B">SUB A, B（減算）</option>
+                </select>
+            </span></div>
+            <div class="memory-cell"><span class="address">3</span><span class="instruction">WRITE C, 102</span></div>
+            <div class="memory-cell"><span class="address">4</span><span class="instruction">STOP</span></div>
+
+            <h3>データ格納領域（2進数入力）</h3>
+            <div id="a_dataInput100" class="data-input">
+                <span>100</span><input type="text" id="a_mem100" value="1010">
+                <span style="width:auto;font-weight:normal;font-size:0.85em;color:#555;">← A</span>
+            </div>
+            <div id="a_dataInput101" class="data-input">
+                <span>101</span><input type="text" id="a_mem101" value="101">
+                <span style="width:auto;font-weight:normal;font-size:0.85em;color:#555;">← B</span>
+            </div>
+            <div id="a_dataInput102" class="data-input">
+                <span>102</span><span class="mem-out" id="a_mem102">0</span>
+                <span style="width:auto;font-weight:normal;font-size:0.85em;color:#555;">← 計算結果</span>
+            </div>
+        </div>
+    </div>
+
+    <div class="button-container">
+        <button class="step-btn" onclick="stopPlay(); simA.next();">処理を1つずつ実行</button>
+        <button class="step-btn" onclick="stopPlay(); simA.reset();">初期化</button>
+    </div>
+</div>
+
+<!-- ================= 応用編 ================= -->
+<div id="b_panel" class="tab-panel" hidden>
+    <p class="panel-note">※ 応用編では「ACC（レジスタCに加算して累積）」「DEC（レジスタを1減らす）」「JNZ（レジスタが0でなければ指定アドレスへジャンプ）」という命令を追加しています。JNZが実行されると、フェッチの直後に一度更新されたはずのプログラムカウンタ(PC)が、命令の実行結果（レジスタDの値）によって再び書き換えられます。この「PCが書き換わることで同じ命令を繰り返し実行できる」という点が、ループ処理の正体であり、PCレジスタの本当の役割です。このプログラムはB(加算する値)をD(回数)だけレジスタCに繰り返し足し込む処理で、実行のたびにCの値が2進数で増えていく様子が見えます（B×Dの掛け算を足し算の繰り返しで計算しています）。</p>
+    <div class="simulation">
+        <div class="cpu-box">
+            <h2>CPU</h2>
+            <div class="control-unit">
+                <h2>制御装置</h2>
+                <div id="b_programCounter" class="register">プログラムカウンタ: <span id="b_pcValue">0</span></div>
+                <div id="b_instructionRegister" class="register">命令レジスタ: <span id="b_irValue"></span></div>
+                <div class="register phase-indicator">フェーズ: <span id="b_phaseValue">-</span></div>
+                <div class="register decoded-info">デコード結果: <span id="b_decodedValue">-</span></div>
+            </div>
+
+            <div class="alu-container">
+                <h2>演算装置</h2>
+                <div id="b_registerB" class="register">レジスタB（加算する値）: <span id="b_valueB">0</span></div>
+                <div id="b_registerC" class="register">レジスタC（累積結果）: <span id="b_valueC">0</span></div>
+                <div id="b_registerD" class="register">レジスタD（ループ用カウンタ）: <span id="b_valueD">0</span></div>
+                <div id="b_alu" class="alu">ALU <br>（算術論理演算装置）: <span id="b_result">0</span></div>
+                <p class="alu-note">※ ALUは加算などの演算を行うときだけ使われます。ACC（Cへ累積）とDEC（1減らす）はALUを使いますが、READ／WRITEはメモリとレジスタの間でデータを転送するだけなのでALUは使いません。</p>
+            </div>
+        </div>
+
+        <div id="b_memory" class="memory-box">
+            <h2>主記憶装置(メモリ)</h2>
+            <h3>命令格納領域</h3>
+            <div class="memory-cell"><span class="address">0</span><span class="instruction">READ D, 101</span></div>
+            <div class="memory-cell"><span class="address">1</span><span class="instruction">READ B, 100</span></div>
+            <div class="memory-cell"><span class="address">2</span><span class="instruction">ACC B</span></div>
+            <div class="memory-cell"><span class="address">3</span><span class="instruction">DEC D</span></div>
+            <div class="memory-cell"><span class="address">4</span><span class="instruction">JNZ D, 2</span></div>
+            <div class="memory-cell"><span class="address">5</span><span class="instruction">WRITE C, 102</span></div>
+            <div class="memory-cell"><span class="address">6</span><span class="instruction">STOP</span></div>
+
+            <h3>データ格納領域（2進数入力）</h3>
+            <div id="b_dataInput100" class="data-input">
+                <span>100</span><input type="text" id="b_mem100" value="10">
+                <span style="width:auto;font-weight:normal;font-size:0.85em;color:#555;">← 加算する値(B)</span>
+            </div>
+            <div id="b_dataInput101" class="data-input">
+                <span>101</span><input type="text" id="b_mem101" value="11">
+                <span style="width:auto;font-weight:normal;font-size:0.85em;color:#555;">← 繰り返し回数(D)</span>
+            </div>
+            <div id="b_dataInput102" class="data-input">
+                <span>102</span><span class="mem-out" id="b_mem102">0</span>
+            </div>
+        </div>
+    </div>
+
+    <div class="button-container">
+        <button class="step-btn" onclick="stopPlay(); simB.next();">処理を1つずつ実行</button>
+        <button class="step-btn" onclick="stopPlay(); simB.reset();">初期化</button>
+    </div>
+</div>
+
+<!-- ================= 発展編2（割り算） ================= -->
+<div id="c_panel" class="tab-panel" hidden>
+    <p class="panel-note">※ 割り算には「JGE（比較して以上ならジャンプ）」「SUBR（引き算した値でレジスタ自身を上書き）」「INC（レジスタを1増やす）」という命令を使います。考え方は「余りが割る数以上である間、引き算を繰り返し、引けた回数を数える」というものです（筆算の代わりに、コンピュータは引き算の繰り返しで割り算をしています）。なお、SUB（基本編）は2つのレジスタの値をCという別のレジスタへ書き出す方式でしたが、このSUBRは1つ目のレジスタ自身を更新する方式です。実際のCPUの命令にも、この2つの書き方（別のレジスタに結果を出す方式／自分自身を更新する方式）の両方が存在します。</p>
+    <div class="simulation">
+        <div class="cpu-box">
+            <h2>CPU</h2>
+            <div class="control-unit">
+                <h2>制御装置</h2>
+                <div id="c_programCounter" class="register">プログラムカウンタ: <span id="c_pcValue">0</span></div>
+                <div id="c_instructionRegister" class="register">命令レジスタ: <span id="c_irValue"></span></div>
+                <div class="register phase-indicator">フェーズ: <span id="c_phaseValue">-</span></div>
+                <div class="register decoded-info">デコード結果: <span id="c_decodedValue">-</span></div>
+            </div>
+
+            <div class="alu-container">
+                <h2>演算装置</h2>
+                <div id="c_registerR" class="register">レジスタR（被除数→余り）: <span id="c_valueR">0</span></div>
+                <div id="c_registerB" class="register">レジスタB（除数）: <span id="c_valueB">0</span></div>
+                <div id="c_registerQ" class="register">レジスタQ（商）: <span id="c_valueQ">0</span></div>
+                <div id="c_alu" class="alu">ALU <br>（算術論理演算装置）: <span id="c_result">0</span></div>
+                <p class="alu-note">※ ALUは減算（SUBR）・加算（INC）・比較（JGE）を行うときだけ使われます。READ／WRITEはメモリとレジスタの間でデータを転送するだけなのでALUは使いません。</p>
+            </div>
+        </div>
+
+        <div id="c_memory" class="memory-box">
+            <h2>主記憶装置(メモリ)</h2>
+            <h3>命令格納領域</h3>
+            <div class="memory-cell"><span class="address">0</span><span class="instruction">READ R, 100</span></div>
+            <div class="memory-cell"><span class="address">1</span><span class="instruction">READ B, 101</span></div>
+            <div class="memory-cell"><span class="address">2</span><span class="instruction">SUBR R, B</span></div>
+            <div class="memory-cell"><span class="address">3</span><span class="instruction">INC Q</span></div>
+            <div class="memory-cell"><span class="address">4</span><span class="instruction">JGE R, B, 2</span></div>
+            <div class="memory-cell"><span class="address">5</span><span class="instruction">WRITE Q, 102</span></div>
+            <div class="memory-cell"><span class="address">6</span><span class="instruction">WRITE R, 103</span></div>
+            <div class="memory-cell"><span class="address">7</span><span class="instruction">STOP</span></div>
+
+            <h3>データ格納領域（2進数入力）</h3>
+            <div id="c_dataInput100" class="data-input">
+                <span>100</span><input type="text" id="c_mem100" value="1101">
+                <span style="width:auto;font-weight:normal;font-size:0.85em;color:#555;">← 被除数</span>
+            </div>
+            <div id="c_dataInput101" class="data-input">
+                <span>101</span><input type="text" id="c_mem101" value="100">
+                <span style="width:auto;font-weight:normal;font-size:0.85em;color:#555;">← 除数</span>
+            </div>
+            <div id="c_dataInput102" class="data-input">
+                <span>102</span><span class="mem-out" id="c_mem102">0</span>
+                <span style="width:auto;font-weight:normal;font-size:0.85em;color:#555;">← 商</span>
+            </div>
+            <div id="c_dataInput103" class="data-input">
+                <span>103</span><span class="mem-out" id="c_mem103">0</span>
+                <span style="width:auto;font-weight:normal;font-size:0.85em;color:#555;">← 余り</span>
+            </div>
+        </div>
+    </div>
+
+    <div class="button-container">
+        <button class="step-btn" onclick="stopPlay(); simC.next();">処理を1つずつ実行</button>
+        <button class="step-btn" onclick="stopPlay(); simC.reset();">初期化</button>
+    </div>
+</div>
+
+<script>
+// ============================================================
+// タブ切り替え
+// ============================================================
+let currentSim = null; // 「連続実行」が対象にするシミュレータ（表示中のタブ）
+
+function showTab(which) {
+    stopPlay();
+    document.getElementById('a_panel').hidden = (which !== 'a');
+    document.getElementById('b_panel').hidden = (which !== 'b');
+    document.getElementById('c_panel').hidden = (which !== 'c');
+    document.getElementById('tabBtnA').classList.toggle('active', which === 'a');
+    document.getElementById('tabBtnB').classList.toggle('active', which === 'b');
+    document.getElementById('tabBtnC').classList.toggle('active', which === 'c');
+    currentSim = (which === 'a') ? simA : (which === 'b') ? simB : simC;
+}
+
+// ============================================================
+// 連続実行（速度スケール＋開始/停止）
+// ============================================================
+let playTimer = null;
+
+function onSpeedChange() {
+    const ms = document.getElementById('speedRange').value;
+    document.getElementById('speedLabel').innerText = ms + 'ms/ステップ';
+    if (playTimer) { // 再生中なら新しい速度で再スタート
+        stopPlay(true);
+        startPlay();
+    }
+}
+
+function togglePlay() {
+    if (playTimer) { stopPlay(); } else { startPlay(); }
+}
+
+function startPlay() {
+    if (!currentSim || playTimer) return;
+    const delay = parseInt(document.getElementById('speedRange').value, 10);
+    document.getElementById('playBtn').innerText = '■ 停止';
+    playTimer = setInterval(() => {
+        if (!currentSim) { stopPlay(); return; }
+        currentSim.next(true);
+        if (currentSim.isDone()) { stopPlay(); }
+    }, delay);
+}
+
+function stopPlay(keepLabel) {
+    if (playTimer) { clearInterval(playTimer); playTimer = null; }
+    if (!keepLabel) { document.getElementById('playBtn').innerText = '▶ 連続実行'; }
+}
+
+// ============================================================
+// 命令のデコード（オペコード＋オペランドの意味を日本語で表示）
+// ============================================================
+function decodeInstruction(text) {
+    const parts = text.split(/\s+(.+)/);
+    const opcode = parts[0];
+    const operands = parts[1] ? parts[1].split(',').map(s => s.trim()) : [];
+
+    switch (opcode) {
+        case 'READ':
+            return `オペコード：READ（読み込み） ／ 意味：アドレス${operands[1]}の値 → レジスタ${operands[0]}`;
+        case 'ADD':
+            return `オペコード：ADD（加算） ／ 意味：レジスタ${operands[0]} + レジスタ${operands[1]} → レジスタC`;
+        case 'ACC':
+            return `オペコード：ACC（累積加算） ／ 意味：レジスタC + レジスタ${operands[0]} → レジスタC（Cを更新）`;
+        case 'SUB':
+            return `オペコード：SUB（減算） ／ 意味：レジスタ${operands[0]} − レジスタ${operands[1]} → レジスタC`;
+        case 'SUBR':
+            return `オペコード：SUBR（減算・上書き） ／ 意味：レジスタ${operands[0]} − レジスタ${operands[1]} → レジスタ${operands[0]}（${operands[0]}を更新）`;
+        case 'INC':
+            return `オペコード：INC（1増やす） ／ 意味：レジスタ${operands[0]} + 1 → レジスタ${operands[0]}`;
+        case 'JGE':
+            return `オペコード：JGE（以上ならジャンプ） ／ 意味：レジスタ${operands[0]} が レジスタ${operands[1]} 以上なら${operands[2]}番地へジャンプ（PCを書き換える）`;
+        case 'WRITE':
+            return `オペコード：WRITE（書き込み） ／ 意味：レジスタ${operands[0]}の値 → アドレス${operands[1]}`;
+        case 'DEC':
+            return `オペコード：DEC（1減らす） ／ 意味：レジスタ${operands[0]} − 1 → レジスタ${operands[0]}`;
+        case 'JNZ':
+            return `オペコード：JNZ（0でなければジャンプ） ／ 意味：レジスタ${operands[0]}が0でなければ${operands[1]}番地へジャンプ（PCを書き換える）`;
+        case 'STOP':
+            return `オペコード：STOP（停止） ／ 意味：プログラムの実行を終了`;
+        default:
+            return '';
+    }
+}
+
+// ============================================================
+// 命令ごとの「実行」フェーズの処理（全タブで共有）
+// rel: そのタブ・その命令の実行フェーズ内での相対ステップ番号（0始まり）
+// ctx: {$, clearHl, setPhase, highlightDataAddress, advance, finish, silent}
+// ============================================================
+const OPCODE_HANDLERS = {
+    READ(rel, [register, address], ctx) {
+        switch (rel) {
+            case 0:
+                ctx.clearHl();
+                ctx.setPhase("③ 実行：メモリからデータを取得");
+                ctx.highlightDataAddress(`dataInput${address}`);
+                ctx.advance(); break;
+            case 1:
+                ctx.clearHl();
+                ctx.setPhase("③ 実行：レジスタへ格納");
+                { const v = ctx.$(`mem${address}`).value.trim();
+                  ctx.$(`value${register}`).innerText = v; }
+                ctx.$(`register${register}`).classList.add("highlight");
+                ctx.finish(); break;
+        }
+    },
+    ADD(rel, [r1, r2], ctx) {
+        switch (rel) {
+            case 0:
+                ctx.clearHl();
+                ctx.setPhase(`③ 実行：レジスタ${r1}・${r2}の値をALUへ送る`);
+                ctx.$(`register${r1}`).classList.add("highlight");
+                ctx.$(`register${r2}`).classList.add("highlight");
+                ctx.advance(); break;
+            case 1:
+                ctx.clearHl();
+                ctx.setPhase("③ 実行：ALUで加算");
+                { const a = parseInt(ctx.$(`value${r1}`).innerText, 2);
+                  const b = parseInt(ctx.$(`value${r2}`).innerText, 2);
+                  ctx.$('result').innerText = (a + b).toString(2); }
+                ctx.$('alu').classList.add("highlight");
+                ctx.advance(); break;
+            case 2:
+                ctx.clearHl();
+                ctx.setPhase("③ 実行：結果をレジスタCへ格納");
+                ctx.$('valueC').innerText = ctx.$('result').innerText;
+                ctx.$('registerC').classList.add("highlight");
+                ctx.finish(); break;
+        }
+    },
+    SUB(rel, [r1, r2], ctx) {
+        switch (rel) {
+            case 0:
+                ctx.clearHl();
+                ctx.setPhase(`③ 実行：レジスタ${r1}・${r2}の値をALUへ送る`);
+                ctx.$(`register${r1}`).classList.add("highlight");
+                ctx.$(`register${r2}`).classList.add("highlight");
+                ctx.advance(); break;
+            case 1:
+                ctx.clearHl();
+                ctx.setPhase("③ 実行：ALUで減算");
+                { const a = parseInt(ctx.$(`value${r1}`).innerText, 2);
+                  const b = parseInt(ctx.$(`value${r2}`).innerText, 2);
+                  ctx.$('result').innerText = Math.max(a - b, 0).toString(2); }
+                ctx.$('alu').classList.add("highlight");
+                ctx.advance(); break;
+            case 2:
+                ctx.clearHl();
+                ctx.setPhase("③ 実行：結果をレジスタCへ格納");
+                ctx.$('valueC').innerText = ctx.$('result').innerText;
+                ctx.$('registerC').classList.add("highlight");
+                ctx.finish(); break;
+        }
+    },
+    SUBR(rel, [destReg, srcReg], ctx) {
+        switch (rel) {
+            case 0:
+                ctx.clearHl();
+                ctx.setPhase(`③ 実行：レジスタ${destReg}・${srcReg}の値をALUへ送る`);
+                ctx.$(`register${destReg}`).classList.add("highlight");
+                ctx.$(`register${srcReg}`).classList.add("highlight");
+                ctx.advance(); break;
+            case 1:
+                ctx.clearHl();
+                ctx.setPhase("③ 実行：ALUで減算");
+                { const a = parseInt(ctx.$(`value${destReg}`).innerText, 2);
+                  const b = parseInt(ctx.$(`value${srcReg}`).innerText, 2);
+                  ctx.$('result').innerText = Math.max(a - b, 0).toString(2); }
+                ctx.$('alu').classList.add("highlight");
+                ctx.advance(); break;
+            case 2:
+                ctx.clearHl();
+                ctx.setPhase(`③ 実行：結果をレジスタ${destReg}へ格納（上書き）`);
+                ctx.$(`value${destReg}`).innerText = ctx.$('result').innerText;
+                ctx.$(`register${destReg}`).classList.add("highlight");
+                ctx.finish(); break;
+        }
+    },
+    INC(rel, [register], ctx) {
+        switch (rel) {
+            case 0:
+                ctx.clearHl();
+                ctx.setPhase(`③ 実行：レジスタ${register}の値をALUへ送る`);
+                ctx.$(`register${register}`).classList.add("highlight");
+                ctx.advance(); break;
+            case 1:
+                ctx.clearHl();
+                ctx.setPhase(`③ 実行：ALUで${register}+1を計算し格納`);
+                { const v = parseInt(ctx.$(`value${register}`).innerText, 2);
+                  const nv = v + 1;
+                  ctx.$(`value${register}`).innerText = nv.toString(2);
+                  ctx.$('result').innerText = nv.toString(2); }
+                ctx.$('alu').classList.add("highlight");
+                ctx.$(`register${register}`).classList.add("highlight");
+                ctx.finish(); break;
+        }
+    },
+    JGE(rel, [regA, regB, address], ctx) {
+        switch (rel) {
+            case 0:
+                ctx.clearHl();
+                ctx.setPhase(`③ 実行：レジスタ${regA}と${regB}の値を比較`);
+                ctx.$(`register${regA}`).classList.add("highlight");
+                ctx.$(`register${regB}`).classList.add("highlight");
+                ctx.advance(); break;
+            case 1: {
+                const a = parseInt(ctx.$(`value${regA}`).innerText, 2);
+                const b = parseInt(ctx.$(`value${regB}`).innerText, 2);
+                ctx.clearHl();
+                ctx.$(`register${regA}`).classList.add("highlight");
+                ctx.$(`register${regB}`).classList.add("highlight");
+                if (a >= b) {
+                    ctx.setPhase(`③ 実行：${regA}≧${regB} → PCを${address}番地へ書き換えてジャンプ`);
+                    ctx.finish(parseInt(address, 10));
+                } else {
+                    ctx.setPhase(`③ 実行：${regA}＜${regB} → ジャンプせず次の命令へ`);
+                    ctx.finish();
+                }
+                break;
+            }
+        }
+    },
+    ACC(rel, [srcRegister], ctx) {
+        switch (rel) {
+            case 0:
+                ctx.clearHl();
+                ctx.setPhase(`③ 実行：レジスタC・${srcRegister}の値をALUへ送る`);
+                ctx.$('registerC').classList.add("highlight");
+                ctx.$(`register${srcRegister}`).classList.add("highlight");
+                ctx.advance(); break;
+            case 1:
+                ctx.clearHl();
+                ctx.setPhase("③ 実行：ALUで加算（Cに累積）");
+                { const c = parseInt(ctx.$('valueC').innerText, 2);
+                  const s = parseInt(ctx.$(`value${srcRegister}`).innerText, 2);
+                  ctx.$('result').innerText = (c + s).toString(2); }
+                ctx.$('alu').classList.add("highlight");
+                ctx.advance(); break;
+            case 2:
+                ctx.clearHl();
+                ctx.setPhase("③ 実行：更新した値をレジスタCへ格納");
+                ctx.$('valueC').innerText = ctx.$('result').innerText;
+                ctx.$('registerC').classList.add("highlight");
+                ctx.finish(); break;
+        }
+    },
+    WRITE(rel, [register, address], ctx) {
+        switch (rel) {
+            case 0:
+                ctx.clearHl();
+                ctx.setPhase("③ 実行：レジスタの値を読み出す");
+                ctx.$(`register${register}`).classList.add("highlight");
+                ctx.advance(); break;
+            case 1:
+                ctx.clearHl();
+                ctx.setPhase("③ 実行：メモリへ書き込み");
+                { const v = ctx.$(`value${register}`).innerText;
+                  ctx.$(`mem${address}`).innerText = v; }
+                ctx.highlightDataAddress(`dataInput${address}`);
+                ctx.finish(); break;
+        }
+    },
+    DEC(rel, [register], ctx) {
+        switch (rel) {
+            case 0:
+                ctx.clearHl();
+                ctx.setPhase(`③ 実行：レジスタ${register}の値をALUへ送る`);
+                ctx.$(`register${register}`).classList.add("highlight");
+                ctx.advance(); break;
+            case 1:
+                ctx.clearHl();
+                ctx.setPhase(`③ 実行：ALUで${register}−1を計算し格納`);
+                { const v = parseInt(ctx.$(`value${register}`).innerText, 2);
+                  const nv = Math.max(v - 1, 0);
+                  ctx.$(`value${register}`).innerText = nv.toString(2);
+                  ctx.$('result').innerText = nv.toString(2); }
+                ctx.$('alu').classList.add("highlight");
+                ctx.$(`register${register}`).classList.add("highlight");
+                ctx.finish(); break;
+        }
+    },
+    JNZ(rel, [register, address], ctx) {
+        switch (rel) {
+            case 0:
+                ctx.clearHl();
+                ctx.setPhase(`③ 実行：レジスタ${register}が0かどうかを確認`);
+                ctx.$(`register${register}`).classList.add("highlight");
+                ctx.advance(); break;
+            case 1: {
+                const v = parseInt(ctx.$(`value${register}`).innerText, 2);
+                ctx.clearHl();
+                ctx.$(`register${register}`).classList.add("highlight");
+                if (v !== 0) {
+                    ctx.setPhase(`③ 実行：${register}≠0 → PCを${address}番地へ書き換えてジャンプ`);
+                    ctx.finish(parseInt(address, 10));
+                } else {
+                    ctx.setPhase(`③ 実行：${register}=0 → ジャンプせず次の命令へ`);
+                    ctx.finish();
+                }
+                break;
+            }
+        }
+    },
+    STOP(rel, operands, ctx) {
+        switch (rel) {
+            case 0:
+                ctx.clearHl();
+                ctx.finish();
+                if (ctx.silent) {
+                    ctx.setPhase("③ 実行：プログラムの実行を終了（自動停止しました）");
+                } else {
+                    ctx.setPhase("③ 実行：プログラムの実行を終了");
+                    alert("プログラムが終了しました。");
+                }
+                break;
+        }
+    }
+};
+
+// ============================================================
+// シミュレータ本体（prefixごとに独立した状態を持つ）
+// instructions の各要素は 文字列 または 関数（呼び出すと現在の文字列を返す＝プルダウン対応）
+// ============================================================
+function createSimulator(prefix, instructions, registers, resetDefaults) {
+    let step = 0;
+    let subStep = 0;
+    let currentInstrText = '';
+    const $ = id => document.getElementById(prefix + id);
+    const panel = document.getElementById(prefix + 'panel');
+
+    function resolveInstr(idx) {
+        const raw = instructions[idx];
+        return (typeof raw === 'function') ? raw() : raw;
+    }
+
+    function clearHl() {
+        panel.querySelectorAll('.highlight').forEach(el => el.classList.remove('highlight'));
+    }
+    function setPhase(text) { $('phaseValue').innerText = text; }
+    function highlightMemory(address) {
+        const cell = panel.querySelector(`.memory-box .memory-cell:nth-child(${address + 3})`);
+        if (cell) cell.classList.add('highlight');
+    }
+    function highlightDataAddress(id) {
+        clearHl();
+        const t = $(id);
+        if (t) t.classList.add('highlight');
+    }
+
+    function next(silent) {
+        const pcValueEl = $('pcValue');
+        const irValueEl = $('irValue');
+        const decodedValueEl = $('decodedValue');
+        const pcEl = $('programCounter');
+        const irEl = $('instructionRegister');
+
+        if (step >= instructions.length) {
+            if (!silent) { alert("プログラムが終了しました。"); }
+            return;
+        }
+        const currentPC = step;
+
+        // ---- 共通のフェッチ・デコード処理 ----
+        if (subStep <= 4) {
+            switch (subStep) {
+                case 0:
+                    clearHl();
+                    setPhase("① フェッチ：PCが指す命令アドレスを確認");
+                    pcEl.classList.add("highlight");
+                    subStep++; return;
+                case 1:
+                    clearHl();
+                    setPhase("① フェッチ：メモリから命令を読み出す");
+                    highlightMemory(currentPC);
+                    subStep++; return;
+                case 2:
+                    clearHl();
+                    setPhase("① フェッチ：命令レジスタ(IR)へ格納");
+                    currentInstrText = resolveInstr(currentPC);
+                    irValueEl.innerText = currentInstrText;
+                    irEl.classList.add("highlight");
+                    subStep++; return;
+                case 3:
+                    clearHl();
+                    setPhase("① フェッチ完了：PCを次の命令アドレスへ更新");
+                    pcValueEl.innerText = currentPC + 1;
+                    pcEl.classList.add("highlight");
+                    subStep++; return;
+                case 4:
+                    clearHl();
+                    setPhase("② デコード：命令を解読中");
+                    decodedValueEl.innerText = decodeInstruction(currentInstrText);
+                    irEl.classList.add("highlight");
+                    subStep++; return;
+            }
+        }
+
+        // ---- 命令ごとの実行処理 ----
+        const text = currentInstrText;
+        const parts = text.split(/\s+(.+)/);
+        const opcode = parts[0];
+        const operands = parts[1] ? parts[1].split(',').map(s => s.trim()) : [];
+        const relStep = subStep - 5;
+
+        function finish(nextIndexOverride) {
+            const n = (nextIndexOverride !== undefined) ? nextIndexOverride : currentPC + 1;
+            step = n;
+            pcValueEl.innerText = n;
+            subStep = 0;
+            decodedValueEl.innerText = '-';
+        }
+        function advance() { subStep++; }
+
+        const handler = OPCODE_HANDLERS[opcode];
+        if (handler) {
+            handler(relStep, operands, { $, clearHl, setPhase, highlightDataAddress, advance, finish, silent: !!silent });
+        }
+    }
+
+    function reset() {
+        step = 0; subStep = 0; clearHl();
+        $('pcValue').innerText = '0';
+        $('irValue').innerText = '';
+        $('phaseValue').innerText = '-';
+        $('decodedValue').innerText = '-';
+        registers.forEach(r => { $(`value${r}`).innerText = '0'; });
+        $('result').innerText = '0';
+        resetDefaults.forEach(id => { $(id).innerText = '0'; });
+    }
+
+    function isDone() { return step >= instructions.length; }
+
+    return { next, reset, isDone };
+}
+
+// ============================================================
+// 基本編（分岐なし・シーケンシャル実行のみ／2番地はADD・SUBを選択式に）
+// ============================================================
+const simA = createSimulator(
+    'a_',
+    ["READ A, 100", "READ B, 101", () => document.getElementById('a_opSelect').value, "WRITE C, 102", "STOP"],
+    ['A', 'B', 'C'],
+    ['mem102']
+);
+
+// ============================================================
+// 応用編（ループ／分岐：DEC・JNZでPCを書き換える）
+// ============================================================
+const simB = createSimulator(
+    'b_',
+    ["READ D, 101", "READ B, 100", "ACC B", "DEC D", "JNZ D, 2", "WRITE C, 102", "STOP"],
+    ['B', 'C', 'D'],
+    ['mem102']
+);
+
+// ============================================================
+// 発展編2（割り算：繰り返し引き算＋比較分岐でR÷Bの商Qと余りRを求める）
+// ============================================================
+const simC = createSimulator(
+    'c_',
+    ["READ R, 100", "READ B, 101", "SUBR R, B", "INC Q", "JGE R, B, 2", "WRITE Q, 102", "WRITE R, 103", "STOP"],
+    ['R', 'B', 'Q'],
+    ['mem102', 'mem103']
+);
+
+// 初期タブ（基本編）を連続実行の対象に設定
+currentSim = simA;
+</script>
+</body>
+</html>
