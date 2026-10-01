@@ -1,0 +1,416 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>その答え、何を答えてる？｜端末の名前のしくみ</title>
+<style>
+:root{
+  --navy:#1e3a5f; --navy2:#2c5282; --teal:#0f8b8d; --teal-l:#e6f4f4;
+  --bg:#f4f7fa; --card:#fff; --ink:#1f2933; --sub:#5b6875; --line:#d8e0e8;
+}
+*{box-sizing:border-box}
+body{margin:0;font-family:"Hiragino Sans","Hiragino Kaku Gothic ProN","Yu Gothic UI","Meiryo",sans-serif;background:var(--bg);color:var(--ink);line-height:1.6}
+header{background:var(--navy);color:#fff;padding:14px 16px}
+header h1{margin:0;font-size:1.25rem}
+header p{margin:2px 0 0;font-size:.85rem;opacity:.85}
+nav{display:flex;gap:4px;background:var(--navy2);padding:6px 12px 0;flex-wrap:wrap}
+nav button{border:0;background:transparent;color:#dbe7f3;padding:9px 16px;font-size:.95rem;border-radius:8px 8px 0 0;cursor:pointer;font-family:inherit}
+nav button.on{background:var(--bg);color:var(--navy);font-weight:700}
+main{max-width:1100px;margin:0 auto;padding:16px}
+.panel{display:none}.panel.on{display:block}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px;margin-bottom:14px}
+.q{font-size:1.05rem;font-weight:700;color:var(--navy);margin:0 0 8px}
+.searchrow{display:flex;gap:8px;flex-wrap:wrap}
+.searchrow input{flex:1;min-width:200px;font-size:1rem;padding:10px 12px;border:2px solid var(--line);border-radius:8px;font-family:inherit}
+.searchrow input:focus{outline:none;border-color:var(--teal)}
+.chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:12px;max-height:240px;overflow:auto;padding:2px}
+.chip{border:1px solid var(--line);background:#fff;border-radius:999px;padding:6px 12px;font-size:.92rem;cursor:pointer;font-family:inherit;color:var(--ink)}
+.chip:hover{border-color:var(--teal);background:var(--teal-l)}
+.chip.sel{background:var(--teal);color:#fff;border-color:var(--teal)}
+.verdict{font-size:1.25rem;font-weight:700;margin:0 0 6px}
+.badge{display:inline-block;color:#fff;border-radius:6px;padding:2px 10px;margin:0 4px;font-size:1.05rem}
+.desc{color:var(--sub);margin:0 0 12px}
+.grid2{display:grid;grid-template-columns:1.2fr 1fr;gap:14px}
+@media (max-width:760px){.grid2{grid-template-columns:1fr}}
+.stack{border:1px solid var(--line);border-radius:10px;overflow:hidden}
+.grp{background:#eef2f6;font-size:.78rem;font-weight:700;color:var(--sub);padding:3px 10px;letter-spacing:.05em}
+.layer{display:grid;grid-template-columns:130px 1fr;border-top:1px solid var(--line);font-size:.92rem}
+.layer .ln{padding:7px 10px;background:#fafbfc;color:var(--sub);font-weight:600;border-right:1px solid var(--line)}
+.layer .lv{padding:7px 10px}
+.layer.hit .ln{color:#fff}
+.layer.hit .lv{font-weight:700}
+.box{border-radius:10px;padding:10px 12px;margin-bottom:10px;font-size:.95rem}
+.box h4{margin:0 0 4px;font-size:.9rem}
+.miss{background:#fff5f0;border:1px solid #f3c9b3}
+.miss h4{color:#a0461d}
+.better{background:var(--teal-l);border:1px solid #b5dcdc}
+.better h4{color:var(--teal)}
+.notebox{background:#f3f5f9;border:1px solid var(--line)}
+.notebox h4{color:var(--navy)}
+.empty{color:var(--sub);text-align:center;padding:30px 10px}
+/* quiz */
+.qhead{display:flex;justify-content:space-between;align-items:center;color:var(--sub);font-size:.9rem;flex-wrap:wrap;gap:6px}
+.bubble{font-size:1.6rem;font-weight:700;text-align:center;margin:18px 0 6px;color:var(--navy)}
+.bubble small{display:block;font-size:.9rem;color:var(--sub);font-weight:400}
+.opts{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:14px}
+@media (max-width:560px){.opts{grid-template-columns:1fr}}
+.opt{padding:14px;font-size:1rem;border:2px solid var(--line);background:#fff;border-radius:10px;cursor:pointer;font-family:inherit;color:var(--ink)}
+.opt:hover:not(:disabled){border-color:var(--teal)}
+.opt.ok{background:#e3f6e8;border-color:#2f9e55;font-weight:700}
+.opt.ng{background:#fde8e8;border-color:#d64545}
+.fb{margin-top:14px}
+.btn{background:var(--teal);color:#fff;border:0;border-radius:8px;padding:10px 20px;font-size:1rem;cursor:pointer;font-family:inherit}
+.btn.sub{background:var(--navy)}
+.center{text-align:center}
+.score{font-size:2.4rem;font-weight:700;color:var(--teal);margin:10px 0}
+/* table */
+.tablewrap{overflow:auto;border:1px solid var(--line);border-radius:10px;background:#fff}
+table{border-collapse:collapse;width:100%;font-size:.84rem;min-width:1000px}
+th{background:var(--navy);color:#fff;position:sticky;top:0;padding:7px 8px;text-align:left;white-space:nowrap}
+td{border-top:1px solid var(--line);padding:6px 8px;vertical-align:top}
+tr.row{cursor:pointer}tr.row:hover td{background:var(--teal-l)}
+.tbadge{display:inline-block;color:#fff;border-radius:4px;padding:0 6px;font-size:.78rem;white-space:nowrap}
+.filter{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px}
+.filter button{border:1px solid var(--line);background:#fff;border-radius:999px;padding:4px 10px;font-size:.82rem;cursor:pointer;font-family:inherit}
+.filter button.on{background:var(--navy);color:#fff;border-color:var(--navy)}
+.legend{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}
+footer{text-align:center;color:var(--sub);font-size:.78rem;padding:10px 0 24px}
+</style>
+</head>
+<body>
+<header>
+  <h1>その答え、何を答えてる？</h1>
+  <p>「スマホは何ですか？」の答えが、製品ブランド・メーカー・OS…のどれにあたるのかを確かめよう</p>
+</header>
+<nav>
+  <button class="on" data-tab="look">答えを調べる</button>
+  <button data-tab="quiz">クイズ</button>
+  <button data-tab="table">一覧表</button>
+</nav>
+<main>
+
+<!-- 調べる -->
+<section class="panel on" id="p-look">
+  <div class="card">
+    <p class="q">Q.「あなたのスマホ（BYOD端末）は何ですか？」── あなたの答えはどれ？</p>
+    <div class="searchrow">
+      <input id="search" type="text" placeholder="入力して絞り込み（例：あいふぉん、windows、ドコモ）" autocomplete="off">
+    </div>
+    <div class="chips" id="chips"></div>
+  </div>
+  <div id="result"><div class="card empty">上の一覧から、自分の答えに近いものを選んでください。</div></div>
+</section>
+
+<!-- クイズ -->
+<section class="panel" id="p-quiz">
+  <div class="card" id="quizbox"></div>
+</section>
+
+<!-- 一覧表 -->
+<section class="panel" id="p-table">
+  <div class="card">
+    <div class="filter" id="tfilter"></div>
+    <div class="tablewrap"><table id="tbl"></table></div>
+    <p style="font-size:.8rem;color:var(--sub);margin:8px 0 0">行をクリックすると「答えを調べる」で詳しく表示します。</p>
+  </div>
+</section>
+
+</main>
+<footer>情報Ⅰ「コンピュータのしくみ」補助教材</footer>
+
+<script>
+/* ===== 「何を答えているか」の種類 ===== */
+const K = {
+  brand:  {l:'製品ブランド',          c:'#0f8b8d', layer:'brand',
+           d:'メーカーが付けた製品シリーズの名前です。どの会社の、どんな種類の端末かは分かりますが、具体的な機種までは分かりません。',
+           m:'具体的な機種名（例：iPhone 16）や、OSのバージョン'},
+  model:  {l:'機種名（モデル名）',    c:'#14a3a5', layer:'brand',
+           d:'製品ブランドの中の、具体的な1機種の名前です。ここまで言えればかなり正確です。',
+           m:'OSのバージョン（同じ機種でもアップデートで変わる）'},
+  group:  {l:'製品群（端末カテゴリ名）', c:'#3c8dbc', layer:'brand',
+           d:'特定のOSなどを載せた端末の「総称」です。複数のメーカーが作っているので、それだけではメーカーや機種は特定できません。',
+           m:'メーカー名と機種名'},
+  type:   {l:'端末分類',              c:'#6c7a89', layer:'type',
+           d:'スマートフォン・タブレット・ノートPCといった、形や使い方による分類です。',
+           m:'メーカー・製品名・OSのすべて'},
+  maker:  {l:'メーカー名（会社名）',  c:'#1e3a5f', layer:'maker',
+           d:'端末を作っている会社の名前です。1つの会社がいろいろな種類の端末を作っていることが多いので、それだけでは端末が決まりません。',
+           m:'製品ブランド・端末の種類・OS'},
+  os:     {l:'OS名',                  c:'#7b4fb3', layer:'os',
+           d:'端末を動かす基本ソフトウェアの名前です。Android や Windows は多くのメーカーの端末に入っているので、それだけではどの端末か分かりません。',
+           m:'メーカー名・製品名（どの端末なのか）'},
+  osver:  {l:'OSのバージョン',        c:'#9b6fd3', layer:'os',
+           d:'OSの版（世代）を表します。セキュリティ更新が続いているかを判断するのに大切な情報です。',
+           m:'メーカー名・製品名'},
+  kernel: {l:'OS基盤（カーネル）',    c:'#5b3a8c', layer:'kernel',
+           d:'OSの中心部分です。たとえば Android や ChromeOS の土台には Linuxカーネルが使われています。',
+           m:'OS名・製品名'},
+  soc:    {l:'CPU・SoC（チップ）',    c:'#c0632b', layer:'soc',
+           d:'計算を行う部品（プロセッサ）の名前です。スマホではCPU・GPUなどを1つのチップにまとめた SoC が使われています。',
+           m:'製品名・OS'},
+  isa:    {l:'命令セット（アーキテクチャ）', c:'#a0461d', layer:'isa',
+           d:'CPUが理解できる機械語のルールの体系です。命令セットが違うと、同じ機械語のプログラムはそのままでは動きません。',
+           m:'ほぼすべて（とても深い層の答えです）'},
+  carrier:{l:'通信キャリア（回線）',  c:'#2f7d32', layer:'carrier',
+           d:'電話やデータ通信の契約先で、端末そのものではありません。同じ iPhone でも、ドコモ・au・ソフトバンクなどどの回線でも使えます。',
+           m:'端末に関する情報のすべて'},
+  browser:{l:'ブラウザ（アプリ）',    c:'#b07d10', layer:'app',
+           d:'Webページを見るためのアプリです。同じブラウザが多くのOSで使えるので、端末の名前にはなりません。',
+           m:'端末やOSの情報'},
+  app:    {l:'アプリ・サービス',      c:'#c49a1a', layer:'app',
+           d:'端末の上で動くソフトウェアやサービスです。端末の名前ではありません。',
+           m:'端末やOSの情報'}
+};
+
+/* ===== 層（どの層の名前か） ===== */
+const LAYERS = [
+  {g:'製品としての名前'},
+  {k:'maker',  l:'メーカー'},
+  {k:'brand',  l:'製品ブランド・機種'},
+  {k:'type',   l:'端末分類'},
+  {g:'ソフトウェア'},
+  {k:'app',    l:'アプリ・ブラウザ'},
+  {k:'os',     l:'OS'},
+  {k:'kernel', l:'OS基盤・カーネル'},
+  {g:'ハードウェア（中身）'},
+  {k:'soc',    l:'SoC・CPU'},
+  {k:'isa',    l:'命令セット'},
+  {g:'回線'},
+  {k:'carrier',l:'通信キャリア'}
+];
+
+/* ===== データ =====
+ n:答え a:別表記 k:種類 maker brand type os kernel soc isa app carrier note ex(よりはっきりした答え方) */
+const NT='Windows NT系', LX='Linuxカーネル', XNU='Darwin / XNU', ANY='機種による';
+const DEV_APP='（端末に入れて使うソフト）', DEV_CA='（端末とは別に契約）';
+const D = [
+ // ---- 製品ブランド・機種 ----
+ {n:'iPhone',a:'アイフォン アイフォーン',k:'brand',maker:'Apple',brand:'iPhone',type:'スマートフォン',os:'iOS',kernel:XNU,soc:'Apple Aシリーズ',isa:'ARM64',note:'Appleがハードウェア・OSとも設計している。',ex:'AppleのiPhone 16（スマートフォン）で、OSはiOSです。'},
+ {n:'iPhone 16',a:'アイフォン16 iphone15 iphone14 iphone13 iphonese アイフォンse',k:'model',maker:'Apple',brand:'iPhone 16（iPhoneシリーズの1機種）',type:'スマートフォン',os:'iOS',kernel:XNU,soc:'Apple A18',isa:'ARM64',note:'「iPhone」という製品ブランドの中の、具体的な機種名。数字や SE などで機種を区別する。',ex:'AppleのiPhone 16（スマートフォン）で、OSはiOSの最新版です。'},
+ {n:'iPad',a:'アイパッド ipadpro ipadair ipadmini',k:'brand',maker:'Apple',brand:'iPad / iPad Air / iPad Pro / iPad mini',type:'タブレット',os:'iPadOS',kernel:XNU,soc:'Apple A / Mシリーズ',isa:'ARM64',note:'iOSから分かれた iPadOS を搭載するApple製タブレット。',ex:'AppleのiPad Air（タブレット）で、OSはiPadOSです。'},
+ {n:'MacBook',a:'マックブック macbookair macbookpro マック mac imac',k:'brand',maker:'Apple',brand:'MacBook Air / MacBook Pro（Macシリーズ）',type:'ノートPC',os:'macOS',kernel:XNU,soc:'Apple Mシリーズ（古い機種はIntel）',isa:'ARM64（古い機種はx86-64）',note:'2020年以降、IntelのCPUからApple独自のMシリーズに移行した。',ex:'AppleのMacBook Air（ノートPC）で、OSはmacOSです。'},
+ {n:'Galaxy',a:'ギャラクシー galaxys galaxya galaxytab',k:'brand',maker:'Samsung',brand:'Galaxy S / A / Z / Tab',type:'スマートフォン・タブレット',os:'Android（One UI）',kernel:LX,soc:'Snapdragon / Exynos',isa:'ARM64',note:'Samsung独自の画面デザイン（One UI）をAndroidに載せている。',ex:'SamsungのGalaxy A55（スマートフォン）で、OSはAndroidです。'},
+ {n:'Pixel',a:'ピクセル グーグルピクセル pixel9 pixel8',k:'brand',maker:'Google',brand:'Pixel / Pixel Tablet',type:'スマートフォン',os:'Android',kernel:LX,soc:'Google Tensor',isa:'ARM64',note:'Androidの開発元であるGoogle自身が作る端末。',ex:'GoogleのPixel 9（スマートフォン）で、OSはAndroidです。'},
+ {n:'Xperia',a:'エクスペリア',k:'brand',maker:'ソニー（Sony）',brand:'Xperia 1 / 10 など',type:'スマートフォン',os:'Android',kernel:LX,soc:'Snapdragon',isa:'ARM64',note:'ソニー製のAndroidスマートフォン。',ex:'ソニーのXperia 10（スマートフォン）で、OSはAndroidです。'},
+ {n:'AQUOS',a:'アクオス aquossense aquoswish',k:'brand',maker:'シャープ',brand:'AQUOS sense / R / wish',type:'スマートフォン',os:'Android',kernel:LX,soc:'Snapdragon / MediaTek など',isa:'ARM64',note:'シャープのテレビのブランド名でもあるので、何の製品か一緒に言うとよい。',ex:'シャープのAQUOS sense（スマートフォン）で、OSはAndroidです。'},
+ {n:'arrows',a:'アローズ',k:'brand',maker:'FCNT',brand:'arrows We / N など',type:'スマートフォン',os:'Android',kernel:LX,soc:'Snapdragon / MediaTek など',isa:'ARM64',note:'もとは富士通の携帯電話ブランド。今はFCNTという会社が作っている。',ex:'FCNTのarrows We（スマートフォン）で、OSはAndroidです。'},
+ {n:'Surface',a:'サーフェス サーフェイス surfacepro surfacelaptop surfacego',k:'brand',maker:'Microsoft',brand:'Surface Pro / Laptop / Go',type:'ノートPC・タブレットPC',os:'Windows',kernel:NT,soc:'Intel / Snapdragon など',isa:'x86-64 / ARM64',note:'Windowsの開発元であるMicrosoft自身が作る端末。',ex:'MicrosoftのSurface Go（タブレットPC）で、OSはWindows 11です。'},
+ {n:'ThinkPad',a:'シンクパッド',k:'brand',maker:'Lenovo',brand:'ThinkPad X / T / E など',type:'ノートPC',os:'主にWindows（ChromeOS版もあり）',kernel:'NT系 または Linux系',soc:'Intel / AMD / Snapdragon など',isa:'主にx86-64',note:'もとはIBMのブランドで、今はLenovoが作っている。',ex:'LenovoのThinkPad E14（ノートPC）で、OSはWindows 11です。'},
+ {n:'IdeaPad',a:'アイデアパッド',k:'brand',maker:'Lenovo',brand:'IdeaPad など',type:'ノートPC',os:'Windows / ChromeOS',kernel:'NT系 または Linux系',soc:'Intel / AMD / MediaTek など',isa:'x86-64 / ARM64',note:'Lenovoの個人向けノートPC。Chromebook版もある。',ex:'LenovoのIdeaPad（ノートPC）で、OSはWindows 11です。'},
+ {n:'dynabook',a:'ダイナブック',k:'brand',maker:'Dynabook（旧 東芝）',brand:'dynabook',type:'ノートPC',os:'Windows',kernel:NT,soc:'Intel など',isa:'x86-64',note:'会社名とブランド名が同じなので、メーカー名と答えたのか区別がつきにくい。',ex:'Dynabookのdynabook（ノートPC）で、OSはWindows 11です。'},
+ {n:"Let's note",a:'レッツノート letsnote',k:'brand',maker:'パナソニック',brand:"Let's note",type:'ノートPC',os:'Windows',kernel:NT,soc:'Intel',isa:'x86-64',note:'パナソニックのビジネス向けノートPC。',ex:"パナソニックのLet's note（ノートPC）で、OSはWindows 11です。"},
+ {n:'LAVIE',a:'ラヴィ ラビ lavie',k:'brand',maker:'NEC',brand:'LAVIE',type:'ノートPC・デスクトップPC',os:'Windows',kernel:NT,soc:'Intel / AMD など',isa:'x86-64',note:'NECの個人向けPCブランド。',ex:'NECのLAVIE（ノートPC）で、OSはWindows 11です。'},
+ {n:'FMV',a:'エフエムブイ lifebook',k:'brand',maker:'富士通（FCCL）',brand:'FMV / LIFEBOOK',type:'ノートPC・デスクトップPC',os:'Windows',kernel:NT,soc:'Intel / AMD など',isa:'x86-64',note:'富士通ブランドのPC。',ex:'富士通のFMV（ノートPC）で、OSはWindows 11です。'},
+ {n:'VAIO',a:'バイオ',k:'brand',maker:'VAIO（旧 ソニー）',brand:'VAIO',type:'ノートPC',os:'Windows',kernel:NT,soc:'Intel',isa:'x86-64',note:'もとはソニーのPCブランド。会社名とブランド名が同じ。',ex:'VAIOのVAIO SX14（ノートPC）で、OSはWindows 11です。'},
+ {n:'Fireタブレット',a:'ファイヤー ファイア fire firehd キンドル kindle',k:'brand',maker:'Amazon',brand:'Fire HD 8 / Fire HD 10 など',type:'タブレット',os:'Fire OS（Androidがベース）',kernel:LX,soc:'MediaTek',isa:'ARM64',note:'Androidをもとにした独自OS。Google Playは標準では使えない。',ex:'AmazonのFire HD 10（タブレット）で、OSはFire OSです。'},
+ {n:'Chromebook',a:'クロームブック クロムブック',k:'group',maker:'Acer・ASUS・Lenovo・HP・Dell など多数',brand:'各社のChromebook',type:'ノートPC（タブレット型もあり）',os:'ChromeOS',kernel:LX,soc:'Intel / MediaTek など',isa:'x86-64 / ARM64',note:'「ChromeOSを載せたノートPC」の総称。特定のメーカーの製品名ではない。',ex:'LenovoのChromebook（ノートPC）で、OSはChromeOSです。'},
+ {n:'Raspberry Pi',a:'ラズベリーパイ ラズパイ らずぱい raspberrypi raspi rpi ラズパイ5 ラズパイ4 raspberrypi5 raspberrypi4',k:'brand',maker:'Raspberry Pi Ltd（イギリス）',brand:'Raspberry Pi 5 / 4 / 400 / 500 / Zero など',type:'シングルボードコンピュータ（基板1枚のPC）',os:'Raspberry Pi OS（Linux系・Debianベース）など',kernel:LX,soc:'Broadcom BCM2712（Pi 5）など',isa:'ARM64',note:'教育用に作られた小型コンピュータ。キーボード・画面・OSの入ったmicroSDカードを自分で用意して使う。OSを入れ替えられるので、OSと端末が別物であることがよく分かる。なお「Raspberry Pi Pico」はOSのないマイコン（RP2040 / RP2350）で、同じブランドでも種類が違う。',ex:'Raspberry Pi LtdのRaspberry Pi 5（シングルボードコンピュータ）で、OSはRaspberry Pi OSです。'},
+
+ // ---- メーカー名 ----
+ {n:'Apple',a:'アップル あっぷる',k:'maker',maker:'Apple',brand:'iPhone / iPad / Mac など',type:'スマホ・タブレット・PCなど',os:'iOS / iPadOS / macOS',kernel:XNU,soc:'Apple A / Mシリーズ',isa:'ARM64',note:'端末もOSもチップの設計も自社で行う珍しいメーカー。「Apple」だけではスマホかPCか分からない。',ex:'AppleのiPhone（スマートフォン）で、OSはiOSです。'},
+ {n:'Microsoft',a:'マイクロソフト',k:'maker',maker:'Microsoft',brand:'Surface など',type:'PC・タブレットPC',os:'Windows（開発元）',kernel:NT,soc:'Intel / Snapdragon など',isa:'x86-64 / ARM64',note:'Windowsの開発元。端末（Surface）も作るが、Windows端末の多くは他社製。',ex:'MicrosoftのSurface（タブレットPC）で、OSはWindows 11です。'},
+ {n:'Google',a:'グーグル',k:'maker',maker:'Google',brand:'Pixel など',type:'スマホ・タブレット',os:'Android / ChromeOS（開発元）',kernel:LX,soc:'Google Tensor',isa:'ARM64',note:'AndroidとChromeOSの開発元。端末（Pixel）も作るが、Android端末の多くは他社製。',ex:'GoogleのPixel（スマートフォン）で、OSはAndroidです。'},
+ {n:'Samsung',a:'サムスン サムソン',k:'maker',maker:'Samsung',brand:'Galaxy',type:'スマホ・タブレットなど',os:'Android',kernel:LX,soc:'Snapdragon / Exynos',isa:'ARM64',note:'韓国のメーカー。スマホのブランド名はGalaxy。',ex:'SamsungのGalaxy（スマートフォン）で、OSはAndroidです。'},
+ {n:'ソニー',a:'sony',k:'maker',maker:'ソニー',brand:'Xperia など',type:'スマホ・ゲーム機・テレビなど',os:'Android（スマホの場合）',kernel:LX,soc:'Snapdragon',isa:'ARM64',note:'スマホ以外にも多くの製品を作っているので、製品名を言わないと伝わらない。',ex:'ソニーのXperia（スマートフォン）で、OSはAndroidです。'},
+ {n:'シャープ',a:'sharp',k:'maker',maker:'シャープ',brand:'AQUOS など',type:'スマホ・テレビなど',os:'Android（スマホの場合）',kernel:LX,soc:'Snapdragon / MediaTek など',isa:'ARM64',note:'',ex:'シャープのAQUOS sense（スマートフォン）で、OSはAndroidです。'},
+ {n:'OPPO',a:'オッポ',k:'maker',maker:'OPPO',brand:'Reno / Find / A シリーズ',type:'スマートフォン',os:'Android（ColorOS）',kernel:LX,soc:'MediaTek / Snapdragon',isa:'ARM64',note:'中国のメーカー。端末にもOPPOのロゴが大きく入っている。',ex:'OPPOのReno（スマートフォン）で、OSはAndroidです。'},
+ {n:'Xiaomi',a:'シャオミ redmi レドミ poco',k:'maker',maker:'Xiaomi',brand:'Xiaomi / Redmi / POCO',type:'スマホ・タブレット',os:'Android（HyperOS）',kernel:LX,soc:'Snapdragon / MediaTek',isa:'ARM64',note:'Redmi はXiaomiの手ごろな価格帯のブランド。',ex:'XiaomiのRedmi Note（スマートフォン）で、OSはAndroidです。'},
+ {n:'モトローラ',a:'motorola moto モト',k:'maker',maker:'Motorola（Lenovoグループ）',brand:'moto g / razr',type:'スマートフォン',os:'Android',kernel:LX,soc:'Snapdragon / MediaTek',isa:'ARM64',note:'',ex:'Motorolaのmoto g（スマートフォン）で、OSはAndroidです。'},
+ {n:'富士通',a:'ふじつう fujitsu',k:'maker',maker:'富士通',brand:'FMV / LIFEBOOK',type:'ノートPC・デスクトップPC',os:'主にWindows',kernel:NT,soc:'Intel / AMD など',isa:'主にx86-64',note:'メーカー名を答えている。',ex:'富士通のFMV（ノートPC）で、OSはWindows 11です。'},
+ {n:'NEC',a:'エヌイーシー 日本電気',k:'maker',maker:'NEC',brand:'LAVIE',type:'ノートPC・デスクトップPC',os:'主にWindows',kernel:NT,soc:'Intel / AMD など',isa:'主にx86-64',note:'',ex:'NECのLAVIE（ノートPC）で、OSはWindows 11です。'},
+ {n:'パナソニック',a:'panasonic',k:'maker',maker:'パナソニック',brand:"Let's note など",type:'ノートPC・家電など',os:'主にWindows（PCの場合）',kernel:NT,soc:'Intel',isa:'x86-64',note:'',ex:"パナソニックのLet's note（ノートPC）で、OSはWindows 11です。"},
+ {n:'東芝',a:'とうしば toshiba',k:'maker',maker:'Dynabook（旧 東芝のPC部門）',brand:'dynabook',type:'ノートPC',os:'Windows',kernel:NT,soc:'Intel',isa:'x86-64',note:'東芝のPC事業は現在Dynabook株式会社になっている。',ex:'Dynabookのdynabook（ノートPC）で、OSはWindows 11です。'},
+ {n:'ASUS',a:'エイスース アスース asus',k:'maker',maker:'ASUS',brand:'Vivobook / Zenbook / Chromebook など',type:'ノートPCなど',os:'Windows / ChromeOS など',kernel:'NT系 または Linux系',soc:'Intel / AMD / ARM系など',isa:'x86-64 / ARM64',note:'メーカー名だけではOSは特定できない。',ex:'ASUSのChromebook（ノートPC）で、OSはChromeOSです。'},
+ {n:'Lenovo',a:'レノボ',k:'maker',maker:'Lenovo',brand:'ThinkPad / IdeaPad / Chromebook など',type:'ノートPCなど',os:'Windows / ChromeOS など',kernel:'NT系 または Linux系',soc:'Intel / AMD / ARM系など',isa:'x86-64 / ARM64',note:'NECのPCやMotorolaのスマホもLenovoグループ。',ex:'LenovoのIdeaPad（ノートPC）で、OSはWindows 11です。'},
+ {n:'HP',a:'エイチピー ヒューレットパッカード',k:'maker',maker:'HP',brand:'Pavilion / EliteBook / Chromebook など',type:'ノートPCなど',os:'主にWindows',kernel:NT,soc:'Intel / AMD など',isa:'主にx86-64',note:'',ex:'HPのPavilion（ノートPC）で、OSはWindows 11です。'},
+ {n:'Dell',a:'デル',k:'maker',maker:'Dell',brand:'Inspiron / XPS / Latitude など',type:'ノートPCなど',os:'主にWindows',kernel:NT,soc:'Intel / AMD など',isa:'主にx86-64',note:'',ex:'DellのInspiron（ノートPC）で、OSはWindows 11です。'},
+ {n:'Acer',a:'エイサー',k:'maker',maker:'Acer',brand:'Aspire / Swift / Chromebook など',type:'ノートPCなど',os:'Windows / ChromeOS',kernel:'NT系 または Linux系',soc:'Intel / AMD / MediaTek など',isa:'x86-64 / ARM64',note:'',ex:'AcerのChromebook（ノートPC）で、OSはChromeOSです。'},
+ {n:'マウスコンピューター',a:'mouse マウス',k:'maker',maker:'マウスコンピューター',brand:'mouse / G-Tune など',type:'ノートPC・デスクトップPC',os:'Windows',kernel:NT,soc:'Intel / AMD',isa:'x86-64',note:'',ex:'マウスコンピューターのmouse（ノートPC）で、OSはWindows 11です。'},
+
+ // ---- 端末分類 ----
+ {n:'スマホ',a:'スマートフォン すまほ',k:'type',maker:ANY,brand:ANY,type:'スマートフォン',os:'iOS / Android など',kernel:ANY,soc:ANY,isa:'主にARM64',note:'質問の言葉をそのまま返している状態。何も特定できていない。',ex:'AppleのiPhone 16（スマートフォン）で、OSはiOSです。'},
+ {n:'タブレット',a:'たぶれっと',k:'type',maker:ANY,brand:ANY,type:'タブレット',os:'iPadOS / Android / Windows など',kernel:ANY,soc:ANY,isa:ANY,note:'',ex:'AppleのiPad（タブレット）で、OSはiPadOSです。'},
+ {n:'ノートパソコン',a:'パソコン pc ノートpc のーと',k:'type',maker:ANY,brand:ANY,type:'ノートPC',os:'Windows / macOS / ChromeOS など',kernel:ANY,soc:ANY,isa:'x86-64 / ARM64',note:'',ex:'LenovoのIdeaPad（ノートPC）で、OSはWindows 11です。'},
+ {n:'ガラケー',a:'ガラホ がらけー フィーチャーフォン 携帯 けいたい',k:'type',maker:ANY,brand:ANY,type:'フィーチャーフォン（従来型の携帯電話）',os:ANY+'（ガラホはAndroidベース）',kernel:ANY,soc:ANY,isa:ANY,note:'「ガラパゴス携帯」の略。見た目は従来型でも、中身はAndroidベースの機種（ガラホ）が多い。',ex:'京セラのかんたんケータイ（フィーチャーフォン）です。'},
+
+ // ---- OS ----
+ {n:'Windows',a:'ウィンドウズ ウインドウズ',k:'os',maker:'多数（開発元はMicrosoft）',brand:'FMV、ThinkPad、Surface など',type:'PCなど',os:'Windows',kernel:NT,soc:'Intel / AMD / Snapdragon など',isa:'x86-64 / ARM64',note:'OSの名前であって端末の名前ではない。',ex:'富士通のFMV（ノートPC）で、OSはWindows 11です。'},
+ {n:'Android',a:'アンドロイド',k:'os',maker:'多数（開発元はGoogle）',brand:'Galaxy、Pixel、Xperia、AQUOS など',type:'スマホ・タブレット',os:'Android',kernel:LX,soc:ANY,isa:'主にARM64',note:'OSの名前であって製品名ではない。',ex:'SamsungのGalaxy A55（スマートフォン）で、OSはAndroidです。'},
+ {n:'iOS',a:'アイオーエス',k:'os',maker:'Apple',brand:'iPhone',type:'スマートフォン',os:'iOS',kernel:XNU,soc:'Apple Aシリーズ',isa:'ARM64',note:'iOSが動くのはiPhoneだけなので、OSからでも端末がほぼ決まる珍しい例。',ex:'AppleのiPhone 16（スマートフォン）で、OSはiOSです。'},
+ {n:'iPadOS',a:'アイパッドオーエス',k:'os',maker:'Apple',brand:'iPad',type:'タブレット',os:'iPadOS',kernel:XNU,soc:'Apple A / Mシリーズ',isa:'ARM64',note:'',ex:'AppleのiPad（タブレット）で、OSはiPadOSです。'},
+ {n:'macOS',a:'マックオーエス マックos',k:'os',maker:'Apple',brand:'MacBook / iMac など',type:'ノートPC・デスクトップPC',os:'macOS',kernel:XNU,soc:'Apple Mシリーズ',isa:'ARM64',note:'',ex:'AppleのMacBook Air（ノートPC）で、OSはmacOSです。'},
+ {n:'ChromeOS',a:'クロームos クロームオーエス chromeos',k:'os',maker:'多数（開発元はGoogle）',brand:'各社のChromebook',type:'ノートPC',os:'ChromeOS',kernel:LX,soc:'Intel / MediaTek など',isa:'x86-64 / ARM64',note:'ブラウザの「Chrome」とは別物。Chromebookに入っているOS。',ex:'ASUSのChromebook（ノートPC）で、OSはChromeOSです。'},
+ {n:'Raspberry Pi OS',a:'ラズベリーパイos ラズパイos raspbian ラズビアン',k:'os',maker:'Raspberry Pi Ltd（開発元）',brand:'Raspberry Pi',type:'シングルボードコンピュータ',os:'Raspberry Pi OS（Debianベース）',kernel:LX,soc:'Broadcom BCMシリーズ',isa:'ARM64（旧版は32bit ARM）',note:'Raspberry Pi用のLinux系OS。以前は「Raspbian」と呼ばれていた。Raspberry PiにはUbuntuなど別のOSも入れられる。',ex:'Raspberry Pi LtdのRaspberry Pi 5（シングルボードコンピュータ）で、OSはRaspberry Pi OSです。'},
+
+ // ---- OSのバージョン ----
+ {n:'Windows 11',a:'ウィンドウズ11 win11',k:'osver',maker:'多数（開発元はMicrosoft）',brand:ANY,type:'PC',os:'Windows 11',kernel:NT,soc:ANY,isa:'x86-64 / ARM64',note:'OSの名前に加えてバージョンまで言えている。端末の名前は分からない。',ex:'LenovoのThinkPad E14（ノートPC）で、OSはWindows 11です。'},
+ {n:'Windows 10',a:'ウィンドウズ10 win10',k:'osver',maker:'多数（開発元はMicrosoft）',brand:ANY,type:'PC',os:'Windows 10',kernel:NT,soc:ANY,isa:'x86-64',note:'2025年10月に通常のサポートが終了した古いバージョン。セキュリティ更新の面で注意が必要。',ex:'DellのInspiron（ノートPC）で、OSはWindows 10です（更新の確認が必要）。'},
+
+ // ---- カーネル ----
+ {n:'Linux',a:'リナックス',k:'kernel',maker:'（オープンソース）',brand:ANY,type:'PC・サーバ・スマホなど',os:'Ubuntu など／Android・ChromeOSの土台',kernel:LX,soc:ANY,isa:'x86-64 / ARM64 など',note:'厳密にはOSの中心部分（カーネル）の名前。AndroidやChromeOSの土台にもなっている。',ex:'自作PC（デスクトップPC）で、OSはLinux系のUbuntuです。'},
+
+ // ---- SoC・CPU ----
+ {n:'Snapdragon',a:'スナップドラゴン スナドラ qualcomm クアルコム',k:'soc',maker:'Qualcomm（チップの設計）',brand:'多くのAndroidスマホ、一部のWindows PC',type:'スマホ・PCなど',os:'Android / Windows',kernel:ANY,soc:'Snapdragon',isa:'ARM64',note:'部品（SoC）の名前。端末の名前ではない。',ex:'SamsungのGalaxy S（スマートフォン）で、OSはAndroid、SoCはSnapdragonです。'},
+ {n:'Intel Core',a:'インテル intel corei5 corei7 corei3 core celeron セレロン コアi5',k:'soc',maker:'Intel（CPUの製造）',brand:'多くのWindows PC・Chromebook',type:'PC',os:'Windows / ChromeOS など',kernel:ANY,soc:'Intel Core / Celeron など',isa:'x86-64',note:'CPUの名前。端末の名前ではない。',ex:'富士通のFMV（ノートPC）で、OSはWindows 11、CPUはIntel Core i5です。'},
+ {n:'Apple Mシリーズ',a:'m1 m2 m3 m4 エムワン エムツー',k:'soc',maker:'Apple（チップの設計）',brand:'Mac / iPad Pro / iPad Air',type:'PC・タブレット',os:'macOS / iPadOS',kernel:XNU,soc:'Apple M1〜M4 など',isa:'ARM64',note:'Appleが設計したSoCの名前。',ex:'AppleのMacBook Air（ノートPC）で、OSはmacOS、チップはM3です。'},
+ {n:'Google Tensor',a:'テンソル tensor',k:'soc',maker:'Google（チップの設計）',brand:'Pixel',type:'スマートフォン',os:'Android',kernel:LX,soc:'Google Tensor',isa:'ARM64',note:'',ex:'GoogleのPixel 9（スマートフォン）で、OSはAndroid、SoCはTensor G4です。'},
+ {n:'MediaTek',a:'メディアテック dimensity ディメンシティ helio',k:'soc',maker:'MediaTek（チップの設計）',brand:'多くのAndroidスマホ・Chromebook',type:'スマホ・タブレット・PC',os:'Android / ChromeOS',kernel:LX,soc:'Dimensity / Helio など',isa:'ARM64',note:'',ex:'OPPOのReno（スマートフォン）で、OSはAndroid、SoCはMediaTek Dimensityです。'},
+
+ // ---- 命令セット ----
+ {n:'ARM',a:'アーム arm64 aarch64',k:'isa',maker:'Arm社（命令セットの設計・ライセンス）',brand:'ほぼすべてのスマホ、Mac など',type:'スマホ・タブレット・PC',os:ANY,kernel:ANY,soc:'Apple A・M / Snapdragon / Tensor など',isa:'ARM64',note:'省電力が得意な命令セット。Arm社は設計図を他社にライセンスしている。',ex:'AppleのiPhone（スマートフォン）で、OSはiOSです。'},
+ {n:'x86',a:'エックスはちろく x64 x8664 amd64',k:'isa',maker:'Intel / AMD',brand:'多くのWindows PC',type:'PC',os:ANY,kernel:ANY,soc:'Intel Core / AMD Ryzen など',isa:'x86-64',note:'Windows PCで長く使われてきた命令セット。',ex:'DellのInspiron（ノートPC）で、OSはWindows 11です。'},
+
+ // ---- 通信キャリア ----
+ {n:'ドコモ',a:'docomo nttドコモ',k:'carrier',maker:'—',brand:'—',type:'—',os:'—',kernel:'—',soc:'—',isa:'—',carrier:'NTTドコモ',note:'電話・通信の契約先。端末の名前ではない（ドコモで買っても中身はiPhoneやGalaxyなど）。',ex:'AppleのiPhone（スマートフォン）で、回線はドコモです。'},
+ {n:'au',a:'エーユー kddi',k:'carrier',maker:'—',brand:'—',type:'—',os:'—',kernel:'—',soc:'—',isa:'—',carrier:'au（KDDI）',note:'',ex:'GoogleのPixel（スマートフォン）で、回線はauです。'},
+ {n:'ソフトバンク',a:'softbank',k:'carrier',maker:'—',brand:'—',type:'—',os:'—',kernel:'—',soc:'—',isa:'—',carrier:'ソフトバンク',note:'',ex:'AppleのiPhone（スマートフォン）で、回線はソフトバンクです。'},
+ {n:'楽天モバイル',a:'らくてん rakuten',k:'carrier',maker:'—',brand:'—',type:'—',os:'—',kernel:'—',soc:'—',isa:'—',carrier:'楽天モバイル',note:'',ex:'SamsungのGalaxy（スマートフォン）で、回線は楽天モバイルです。'},
+ {n:'格安SIM・サブブランド',a:'ymobile ワイモバイル uqmobile ユーキュー ahamo アハモ povo ポヴォ linemo ラインモ iijmio mvno 格安スマホ',k:'carrier',maker:'—',brand:'—',type:'—',os:'—',kernel:'—',soc:'—',isa:'—',carrier:'Y!mobile・UQ mobile・ahamo・povo・LINEMO・IIJmio など',note:'料金プランや回線のブランド。「格安スマホ」は端末ではなく契約の種類を指すことが多い。',ex:'シャープのAQUOS sense（スマートフォン）で、回線はY!mobileです。'},
+
+ // ---- ブラウザ・アプリ ----
+ {n:'Chrome（Google Chrome）',a:'クローム クロム googlechrome chrome',k:'browser',maker:'Google（開発元）',brand:'—',type:'—',os:'Windows / macOS / Android / iOS など',kernel:'—',soc:'—',isa:'—',app:'Google Chrome（ブラウザ）',note:'ブラウザの名前。ChromebookやChromeOSとよく混同される。',ex:'ASUSのChromebook（ノートPC）で、OSはChromeOS、ブラウザはChromeです。'},
+ {n:'Safari',a:'サファリ',k:'browser',maker:'Apple（開発元）',brand:'—',type:'—',os:'iOS / iPadOS / macOS',kernel:'—',soc:'—',isa:'—',app:'Safari（ブラウザ）',note:'',ex:'AppleのiPhone（スマートフォン）で、OSはiOS、ブラウザはSafariです。'},
+ {n:'Edge',a:'エッジ microsoftedge',k:'browser',maker:'Microsoft（開発元）',brand:'—',type:'—',os:'Windows など',kernel:'—',soc:'—',isa:'—',app:'Microsoft Edge（ブラウザ）',note:'',ex:'MicrosoftのSurface（タブレットPC）で、OSはWindows 11、ブラウザはEdgeです。'},
+ {n:'Office（Word・Excel）',a:'オフィス ワード エクセル microsoft365 マイクロソフト365 word excel',k:'app',maker:'Microsoft（開発元）',brand:'—',type:'—',os:'Windows / macOS / iOS / Android など',kernel:'—',soc:'—',isa:'—',app:'Microsoft 365（Word・Excel・PowerPoint）',note:'アプリ（サービス）の名前。どの端末でも使える。',ex:'富士通のFMV（ノートPC）で、OSはWindows 11です。Officeも入っています。'}
+];
+
+/* ===== ユーティリティ ===== */
+const $ = s => document.querySelector(s);
+const esc = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+function norm(s){
+  return String(s).normalize('NFKC').toLowerCase()
+    .replace(/[ァ-ヶ]/g, ch => String.fromCharCode(ch.charCodeAt(0) - 0x60))
+    .replace(/[\s・\-_/／（）()!！'’。、,.ー]/g,'')
+    .replace(/(です|だよ|だ|かな)$/,'');
+}
+D.forEach((x,i) => { x.id = i; x.keys = [x.n, ...(x.a||'').split(' ')].filter(Boolean).map(norm); });
+function badge(k, cls='badge'){ return `<span class="${cls}" style="background:${K[k].c}">${esc(K[k].l)}</span>`; }
+function val(x, key){
+  if (x[key]) return x[key];
+  if (key==='app') return x.k==='carrier' ? '—' : DEV_APP;
+  if (key==='carrier') return DEV_CA;
+  return '—';
+}
+
+/* ===== タブ ===== */
+document.querySelectorAll('nav button').forEach(b => b.onclick = () => showTab(b.dataset.tab));
+function showTab(t){
+  document.querySelectorAll('nav button').forEach(b => b.classList.toggle('on', b.dataset.tab===t));
+  document.querySelectorAll('.panel').forEach(p => p.classList.toggle('on', p.id==='p-'+t));
+  if (t==='quiz' && !quiz) newQuiz();
+}
+
+/* ===== 調べる ===== */
+const sorted = [...D].sort((a,b) => a.n.localeCompare(b.n,'ja'));
+let selId = null;
+function renderChips(){
+  const q = norm($('#search').value);
+  const list = q ? sorted.filter(x => x.keys.some(k => k.includes(q) || (q.length>=2 && q.includes(k)))) : sorted;
+  $('#chips').innerHTML = list.length
+    ? list.map(x => `<button class="chip${x.id===selId?' sel':''}" data-id="${x.id}">${esc(x.n)}</button>`).join('')
+    : `<span style="color:var(--sub);font-size:.9rem">一覧にありません。メーカー名・製品名・OS名・通信会社名のどれにあたるか、下の「一覧表」で近いものを探してみよう。</span>`;
+  $('#chips').querySelectorAll('.chip').forEach(c => c.onclick = () => show(+c.dataset.id));
+  if (q && list.length===1) show(list[0].id, false);
+}
+$('#search').addEventListener('input', renderChips);
+
+function show(id, scroll=true){
+  selId = id; const x = D[id]; const k = K[x.k];
+  $('#chips').querySelectorAll('.chip').forEach(c => c.classList.toggle('sel', +c.dataset.id===id));
+  const rows = LAYERS.map(L => {
+    if (L.g) return `<div class="grp">${esc(L.g)}</div>`;
+    const hit = L.k===k.layer;
+    return `<div class="layer${hit?' hit':''}">
+      <div class="ln" ${hit?`style="background:${k.c}"`:''}>${hit?'▶ ':''}${esc(L.l)}</div>
+      <div class="lv" ${hit?`style="background:${k.c}22"`:''}>${hit?`「${esc(x.n)}」`+(val(x,L.k)!==x.n?`<br><span style="font-weight:400;font-size:.85rem">${esc(val(x,L.k))}</span>`:''):esc(val(x,L.k))}</div>
+    </div>`;
+  }).join('');
+  $('#result').innerHTML = `
+  <div class="card">
+    <p class="verdict">「${esc(x.n)}」は ${badge(x.k)} を答えています</p>
+    <p class="desc">${esc(k.d)}</p>
+    <div class="grid2">
+      <div>
+        <div class="stack">${rows}</div>
+        <p style="font-size:.78rem;color:var(--sub);margin:6px 0 0">色のついた段が、この答えが指している層です。ほかの段は「この答えから考えられるもの」です。</p>
+      </div>
+      <div>
+        <div class="box miss"><h4>この答えだけでは分からないこと</h4>${esc(k.m)}</div>
+        <div class="box better"><h4>もっとはっきり答えるなら（例）</h4>「${esc(x.ex)}」</div>
+        ${x.note?`<div class="box notebox"><h4>ポイント</h4>${esc(x.note)}</div>`:''}
+      </div>
+    </div>
+  </div>`;
+  if (scroll) $('#result').scrollIntoView({behavior:'smooth', block:'start'});
+}
+
+/* ===== クイズ ===== */
+const QN = 10;
+let quiz = null;
+function shuffle(a){ a=[...a]; for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]];} return a; }
+function newQuiz(){
+  quiz = {qs: shuffle(D).slice(0,QN), i:0, score:0};
+  drawQ();
+}
+function drawQ(){
+  const box = $('#quizbox');
+  if (quiz.i >= quiz.qs.length){
+    box.innerHTML = `<div class="center">
+      <p class="q">結果</p>
+      <div class="score">${quiz.score} / ${quiz.qs.length}</div>
+      <p class="desc">「メーカー」「製品ブランド」「OS」「回線」…どの層の名前なのかを意識して答えよう。</p>
+      <button class="btn" id="again">もう一度</button></div>`;
+    $('#again').onclick = newQuiz; return;
+  }
+  const x = quiz.qs[quiz.i];
+  const others = shuffle(Object.keys(K).filter(k => k!==x.k)).slice(0,3);
+  const opts = shuffle([x.k, ...others]);
+  box.innerHTML = `
+    <div class="qhead"><span>第 ${quiz.i+1} 問 / ${quiz.qs.length}</span><span>正解 ${quiz.score}</span></div>
+    <div class="bubble"><small>「あなたの端末は何ですか？」── 生徒の答え</small>「${esc(x.n)}です」</div>
+    <p class="center" style="margin:0;color:var(--sub)">この答えは、何を答えている？</p>
+    <div class="opts">${opts.map(k => `<button class="opt" data-k="${k}">${esc(K[k].l)}</button>`).join('')}</div>
+    <div class="fb" id="fb"></div>`;
+  box.querySelectorAll('.opt').forEach(b => b.onclick = () => answer(b, x));
+}
+function answer(btn, x){
+  const ok = btn.dataset.k===x.k;
+  if (ok) quiz.score++;
+  $('#quizbox').querySelectorAll('.opt').forEach(b => {
+    b.disabled = true;
+    if (b.dataset.k===x.k) b.classList.add('ok');
+    else if (b===btn) b.classList.add('ng');
+  });
+  $('#fb').innerHTML = `
+    <div class="box ${ok?'better':'miss'}"><h4>${ok?'正解！':'ざんねん…'}「${esc(x.n)}」は ${badge(x.k,'tbadge')}</h4>
+    ${esc(K[x.k].d)}${x.note?'<br>'+esc(x.note):''}</div>
+    <div class="box notebox"><h4>はっきり答えるなら</h4>「${esc(x.ex)}」</div>
+    <div class="center"><button class="btn sub" id="next">${quiz.i+1<quiz.qs.length?'次の問題へ':'結果を見る'}</button></div>`;
+  $('#next').onclick = () => { quiz.i++; drawQ(); };
+}
+
+/* ===== 一覧表 ===== */
+let tf = 'all';
+function renderTable(){
+  const kinds = ['all', ...Object.keys(K)];
+  $('#tfilter').innerHTML = kinds.map(k =>
+    `<button class="${k===tf?'on':''}" data-k="${k}">${k==='all'?'すべて':esc(K[k].l)}</button>`).join('');
+  $('#tfilter').querySelectorAll('button').forEach(b => b.onclick = () => { tf=b.dataset.k; renderTable(); });
+  const rows = D.filter(x => tf==='all' || x.k===tf);
+  $('#tbl').innerHTML = `<thead><tr>
+    <th>生徒の答え</th><th>何を答えているか</th><th>メーカー・開発元</th><th>製品・ブランド例</th><th>端末分類</th>
+    <th>OS</th><th>OS基盤・カーネル</th><th>主なSoC / CPU</th><th>命令セット</th><th>特徴</th></tr></thead><tbody>` +
+    rows.map(x => `<tr class="row" data-id="${x.id}">
+      <td><b>${esc(x.n)}</b></td><td>${badge(x.k,'tbadge')}</td><td>${esc(x.maker)}</td><td>${esc(x.k==='carrier'?x.carrier:x.k==='browser'||x.k==='app'?x.app:x.brand)}</td>
+      <td>${esc(x.type)}</td><td>${esc(x.os)}</td><td>${esc(x.kernel)}</td><td>${esc(x.soc)}</td><td>${esc(x.isa)}</td><td>${esc(x.note)}</td></tr>`).join('') + '</tbody>';
+  $('#tbl').querySelectorAll('tr.row').forEach(r => r.onclick = () => {
+    showTab('look'); $('#search').value=''; renderChips(); show(+r.dataset.id);
+  });
+}
+
+renderChips();
+renderTable();
+</script>
+</body>
+</html>
