@@ -1,0 +1,354 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="description" content="CPU・キャッシュ・メモリ・SSD・HDD・人・磁気テープのアクセス時間の差を、かけっこで体感する教材">
+<title>メモリ階層かけっこ</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Dela+Gothic+One&family=IBM+Plex+Mono:wght@400;600&family=Zen+Kaku+Gothic+New:wght@400;500;700&display=swap">
+<style>
+/* Layout: 方眼紙の上の陸上トラック。上に操作盤、下に装置ごとのレーンを縦に並べる */
+:root{
+  --bg:#edf1f3; --surface:#ffffff; --fg:#17232c; --muted:#56687a; --line:#cbd5dc; --grid:#dfe6eb;
+  --chip:#0a7d74; --mem:#2f55c4; --sto:#a66300; --hum:#a1306f;
+  --accent:var(--chip); --accent-fg:#ffffff; --base-bg:#e3f2ef;
+  --f-display:"Dela Gothic One","Zen Kaku Gothic New","Hiragino Sans","Yu Gothic",sans-serif;
+  --f-body:"Zen Kaku Gothic New","Hiragino Sans","Yu Gothic","Meiryo",sans-serif;
+  --f-num:"IBM Plex Mono",ui-monospace,"SFMono-Regular",Menlo,monospace;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#0f161c; --surface:#172129; --fg:#e2e9ee; --muted:#93a4b2; --line:#2a3743; --grid:#1c2730;
+    --chip:#3cc4b7; --mem:#7c9bff; --sto:#f0a53a; --hum:#e77bb6; --accent-fg:#0f161c; --base-bg:#16302e;
+    color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#0f161c; --surface:#172129; --fg:#e2e9ee; --muted:#93a4b2; --line:#2a3743; --grid:#1c2730;
+  --chip:#3cc4b7; --mem:#7c9bff; --sto:#f0a53a; --hum:#e77bb6; --accent-fg:#0f161c; --base-bg:#16302e;
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+html,body{margin:0}
+[hidden]{display:none!important}
+body{
+  background:var(--bg); color:var(--fg); font-family:var(--f-body); font-size:15px; line-height:1.6;
+  background-image:linear-gradient(var(--grid) 1px,transparent 1px),linear-gradient(90deg,var(--grid) 1px,transparent 1px);
+  background-size:24px 24px;
+}
+.wrap{max-width:1080px; margin:0 auto; padding-inline:16px; padding-block:28px 48px; display:grid; gap:20px}
+header{display:grid; gap:6px}
+h1{font-family:var(--f-display); font-weight:400; font-size:clamp(1.7rem,4vw,2.4rem); line-height:1.2; margin:0; text-wrap:balance; letter-spacing:.02em}
+.lead{margin:0; color:var(--muted); max-width:62ch}
+
+/* 操作盤 */
+.panel{background:var(--surface); border:1px solid var(--line); border-radius:10px; padding:18px; display:grid; gap:18px 22px;
+  grid-template-columns:repeat(auto-fit,minmax(min(100%,230px),1fr)); align-items:start}
+.ctl{display:grid; gap:6px; min-width:0}
+.ctl > label,.ctl .lbl{font-size:.8rem; font-weight:700; color:var(--muted); letter-spacing:.06em}
+.big{font-family:var(--f-num); font-size:1.6rem; font-weight:600; line-height:1.1; font-variant-numeric:tabular-nums}
+.big small{font-size:.85rem; color:var(--muted); font-weight:400; margin-left:4px}
+.note{font-size:.8rem; color:var(--muted)}
+input[type=range]{width:100%; accent-color:var(--accent)}
+select{font:inherit; font-weight:700; padding:7px 8px; border-radius:8px; border:1px solid var(--line); background:var(--surface); color:var(--fg); width:100%}
+select:focus-visible{outline:2px solid var(--accent); outline-offset:1px}
+.seg{display:flex; border:1px solid var(--line); border-radius:8px; overflow:hidden}
+.seg label{flex:1; text-align:center; cursor:pointer; padding:7px 4px; font-size:.85rem; font-weight:500; color:var(--fg)}
+.seg input{position:absolute; opacity:0; pointer-events:none}
+.seg label:has(input:checked){background:var(--accent); color:var(--accent-fg)}
+.seg label:has(input:focus-visible){outline:2px solid var(--accent); outline-offset:-3px}
+.btns{display:flex; gap:8px; flex-wrap:wrap}
+button{font:inherit; font-weight:700; border-radius:8px; padding:9px 16px; cursor:pointer; border:1px solid var(--line); background:var(--surface); color:var(--fg)}
+button.primary{background:var(--accent); border-color:var(--accent); color:var(--accent-fg)}
+button:focus-visible{outline:2px solid var(--accent); outline-offset:2px}
+.status{font-size:.85rem; color:var(--muted)}
+.bar{height:4px; background:var(--line); border-radius:2px; overflow:hidden}
+.bar span{display:block; height:100%; width:0; background:var(--accent)}
+
+/* レーン */
+.legend{display:flex; flex-wrap:wrap; gap:14px; font-size:.82rem; color:var(--muted)}
+.legend span{display:inline-flex; align-items:center; gap:6px}
+.legend i{width:12px; height:12px; border-radius:3px; background:var(--c)}
+.lanes{display:grid; gap:10px}
+.lane{--c:var(--chip); background:var(--surface); border:1px solid var(--line); border-radius:10px; padding:12px 14px;
+  display:grid; grid-template-columns:11.5rem minmax(0,1fr) 16.5rem; gap:8px 16px; align-items:center}
+.lane.base{background:var(--base-bg); border-color:var(--c); box-shadow:inset 4px 0 0 var(--c)}
+.who{display:grid; gap:0; min-width:0}
+.who .tier{font-size:.72rem; font-weight:700; letter-spacing:.06em; color:var(--c)}
+.who strong{font-size:1rem; line-height:1.35}
+.who .lat{font-family:var(--f-num); font-size:.8rem; color:var(--muted)}
+.badge{display:none; justify-self:start; margin-top:4px; font-size:.7rem; font-weight:700; letter-spacing:.06em; padding:1px 8px; border-radius:99px; background:var(--c); color:var(--surface)}
+.lane.base .badge{display:inline-block}
+.trackbox{display:grid; gap:2px; min-width:0}
+.track{position:relative; height:34px; border-bottom:2px solid var(--fg);
+  background-image:linear-gradient(90deg,var(--line) 1px,transparent 1px);
+  background-size:calc(100% / var(--n)) 30%; background-repeat:repeat-x; background-position:left bottom}
+.track::after{content:""; position:absolute; right:-1px; top:0; bottom:-2px; border-right:2px dashed var(--muted)}
+.fill{position:absolute; left:0; bottom:0; height:6px; background:var(--c); opacity:.35; width:0}
+.runner{position:absolute; bottom:0; width:22px; height:30px; margin-left:-11px; left:0; color:var(--c)}
+.runner.back svg{transform:scaleX(-1)}
+.runner svg{width:100%; height:100%; display:block}
+.blurtxt{display:none; position:absolute; inset:0 0 8px 0; align-items:center; justify-content:center; font-size:.78rem; font-weight:700; color:var(--c); text-align:center}
+.lane.blur .runner{display:none}
+.lane.blur .blurtxt{display:flex}
+.lane.blur .fill{width:100% !important; opacity:.5;
+  background:repeating-linear-gradient(90deg,var(--c) 0 6px,transparent 6px 10px)}
+.ticks{display:flex; justify-content:space-between; font-family:var(--f-num); font-size:.7rem; color:var(--muted)}
+.stats{display:grid; grid-template-columns:auto 1fr; gap:0 10px; font-size:.82rem; min-width:0; margin:0}
+.stats dt{color:var(--muted)}
+.stats dd{margin:0; font-family:var(--f-num); font-variant-numeric:tabular-nums; text-align:right; overflow-wrap:anywhere}
+.stats dd.hl{color:var(--c); font-weight:600}
+.hint{grid-column:2 / 4; margin:0; font-size:.8rem; color:var(--muted)}
+.hint:empty{display:none}
+
+footer{font-size:.8rem; color:var(--muted); display:grid; gap:4px}
+footer p{margin:0; max-width:80ch}
+
+@media (max-width:760px){
+  .lane{grid-template-columns:minmax(0,1fr)}
+  .hint{grid-column:auto}
+  .stats{grid-template-columns:auto 1fr auto 1fr}
+}
+@media (max-width:440px){ .stats{grid-template-columns:auto 1fr} }
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <header>
+    <h1>メモリ階層かけっこ</h1>
+    <p class="lead">基準にする装置とその速さを決めてスタートすると、ほかの装置が同じ時間にどれだけ進むかがわかります。速さは1回のアクセスにかかる時間の逆数に比例させています。ゴールに着いた装置は折り返して往復します。</p>
+  </header>
+
+  <section class="panel" aria-label="設定">
+    <div class="ctl">
+      <label for="base">基準にする装置</label>
+      <select id="base"></select>
+      <label for="speed">基準の装置が1秒に進む距離</label>
+      <div class="big"><span id="speedOut">10</span><small>cm / 秒</small></div>
+      <input id="speed" type="range" min="1" max="50" step="0.5" value="10">
+      <span class="note" id="baseNote"></span>
+    </div>
+    <div class="ctl">
+      <label for="course">コースの長さ（片道）</label>
+      <div class="big"><span id="courseOut">10</span><small>cm</small></div>
+      <input id="course" type="range" min="5" max="30" step="1" value="10">
+      <label for="dur">走らせる時間</label>
+      <div class="big"><span id="durOut">1</span><small>秒</small></div>
+      <input id="dur" type="range" min="0.5" max="30" step="0.5" value="1">
+    </div>
+    <div class="ctl">
+      <span class="lbl" id="estLbl">アクセス時間の見積もり</span>
+      <div class="seg" role="radiogroup" aria-labelledby="estLbl">
+        <label><input type="radio" name="est" id="estLo" value="lo">速い側</label>
+        <label><input type="radio" name="est" id="estMid" value="mid" checked>中間</label>
+        <label><input type="radio" name="est" id="estHi" value="hi">遅い側</label>
+      </div>
+      <span class="note">L2やSSDなど幅のある装置で、どの値を使うかを選びます。</span>
+    </div>
+    <div class="ctl">
+      <span class="lbl">経過時間</span>
+      <div class="big"><span id="clock">0.00</span><small id="clockOf">/ 1 秒</small></div>
+      <div class="bar" aria-hidden="true"><span id="bar"></span></div>
+      <span class="status" id="status"></span>
+      <div class="btns">
+        <button class="primary" id="run">スタート</button>
+        <button id="reset">リセット</button>
+      </div>
+    </div>
+  </section>
+
+  <div class="legend" aria-hidden="true">
+    <span style="--c:var(--chip)"><i></i>CPUチップ内</span>
+    <span style="--c:var(--mem)"><i></i>メインメモリ</span>
+    <span style="--c:var(--sto)"><i></i>ストレージ</span>
+    <span style="--c:var(--hum)"><i></i>人間</span>
+  </div>
+
+  <section class="lanes" id="lanes" aria-label="装置ごとのレーン"></section>
+
+  <footer>
+    <p>アクセス時間は一般的な目安で、製品や条件によって幅があります。「最初のデータが届くまでの時間（遅延）」での比較で、連続して読むときの量（帯域）とは別の話です。</p>
+    <p>人が1文字読む時間は、日本語で1分間に400〜600字という値から求めています。速すぎて画面の更新が追いつかない装置は、残像として表示します。</p>
+  </footer>
+</div>
+
+<script>
+(function(){
+  // アクセス時間（ナノ秒）
+  const DEV = [
+    {name:"CPU 1クロック", tier:"chip", lo:0.25, hi:0.25},
+    {name:"L1キャッシュ", tier:"chip", lo:1, hi:1},
+    {name:"L2キャッシュ", tier:"chip", lo:3, hi:4},
+    {name:"L3キャッシュ", tier:"chip", lo:10, hi:15},
+    {name:"メインメモリ（DRAM）", tier:"mem", lo:80, hi:100},
+    {name:"SSD（NVMe）", tier:"sto", lo:2e4, hi:1e5},
+    {name:"ハードディスク", tier:"sto", lo:5e6, hi:1e7},
+    {name:"人が1文字読む", tier:"hum", lo:1e8, hi:1.5e8},
+    {name:"磁気テープ", tier:"sto", lo:3e10, hi:1.2e11}
+  ];
+  const TIER = {chip:"CPUチップ内", mem:"メインメモリ", sto:"ストレージ", hum:"人間"};
+  const SMALL = [["指の幅",1.5],["米粒",0.5],["髪の毛の太さ",0.008],["赤血球",0.0008],
+    ["細菌",0.0001],["ウイルス",0.00001],["DNAのらせんの幅",2e-7],["原子1個",1e-8]];
+  const BIG = [["地球1周",4.0075e9],["東京〜大阪（直線で約400km）",4e7],["富士山の高さ",3.776e5],["25mプール",2500],["教室の横幅（約8m）",800],["人の身長",170]];
+  const LIGHT = 2.998e10; // cm/秒
+  const $ = id => document.getElementById(id);
+  const runnerSVG = '<svg viewBox="0 0 22 30" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="13" cy="4.5" r="3" fill="currentColor" stroke="none"/><path d="M12 9 L10 18 L14 22 L13 28"/><path d="M10 18 L5 22 L3 27"/><path d="M11.5 11 L6 13 L4 10"/><path d="M11.5 11 L16 14 L19 12"/></svg>';
+
+  const baseSel = $("base");
+  DEV.forEach((d,i) => { const o = document.createElement("option"); o.value = i; o.textContent = d.name; baseSel.appendChild(o); });
+
+  const lanesEl = $("lanes");
+  const rows = DEV.map(d => {
+    const el = document.createElement("article");
+    el.className = "lane";
+    el.style.setProperty("--c", "var(--" + d.tier + ")");
+    el.innerHTML =
+      '<div class="who"><span class="tier">'+TIER[d.tier]+'</span><strong>'+d.name+'</strong><span class="lat"></span><span class="badge">基準</span></div>'+
+      '<div class="trackbox"><div class="track"><div class="fill"></div><div class="runner">'+runnerSVG+'</div><div class="blurtxt">速すぎて残像しか見えません</div></div>'+
+      '<div class="ticks"><span>0</span><span class="mid"></span><span class="end"></span></div></div>'+
+      '<dl class="stats"><dt>1秒あたり</dt><dd class="speed hl"></dd><dt>走った距離</dt><dd class="dist"></dd><dt>片道の回数</dt><dd class="trips"></dd><dt>片道にかかる時間</dt><dd class="one"></dd></dl>'+
+      '<p class="hint"></p>';
+    lanesEl.appendChild(el);
+    const q = s => el.querySelector(s);
+    return {d, el, lat:q(".lat"), track:q(".track"), fill:q(".fill"), runner:q(".runner"), mid:q(".mid"), end:q(".end"),
+      speed:q(".speed"), dist:q(".dist"), trips:q(".trips"), one:q(".one"), hint:q(".hint")};
+  });
+
+  // ---- 書式 ----
+  const sig = (x,n=3) => Number(x.toPrecision(n)).toLocaleString("ja-JP",{maximumFractionDigits:6});
+  function jp(x){ // 大きな数を万・億・兆で
+    if (x >= 1e16) return sig(x/1e16) + "京";
+    if (x >= 1e12) return sig(x/1e12) + "兆";
+    if (x >= 1e8) return sig(x/1e8) + "億";
+    if (x >= 1e4) return sig(x/1e4) + "万";
+    return sig(x);
+  }
+  function fmtLen(cm){
+    if (cm <= 0) return "0 cm";
+    if (cm >= 1e5) return jp(cm/1e5) + " km";
+    if (cm >= 100) return sig(cm/100) + " m";
+    if (cm >= 1) return sig(cm) + " cm";
+    if (cm >= 0.1) return sig(cm*10) + " mm";
+    const m = cm/100;
+    const U = [["mm",1e-3],["μm",1e-6],["nm",1e-9],["pm",1e-12],["fm",1e-15]];
+    for (const [u,s] of U) if (m >= s) return sig(m/s) + " " + u;
+    return sig(m/1e-15) + " fm";
+  }
+  function fmtNs(ns){
+    if (ns < 1) return sig(ns*1e3) + " ピコ秒";
+    if (ns < 1e3) return sig(ns) + " ナノ秒";
+    if (ns < 1e6) return sig(ns/1e3) + " マイクロ秒";
+    if (ns < 1e9) return sig(ns/1e6) + " ミリ秒";
+    return sig(ns/1e9) + " 秒";
+  }
+  function fmtDur(s){
+    if (s < 1) return fmtNs(s*1e9);
+    if (s < 60) return sig(s) + " 秒";
+    if (s < 3600) return sig(s/60) + " 分";
+    if (s < 86400) return sig(s/3600) + " 時間";
+    if (s < 86400*365) return sig(s/86400) + " 日";
+    return jp(s/(86400*365)) + " 年";
+  }
+  function fmtTrips(n){
+    if (n < 1) return sig(n*100,2) + "%（1回目の途中）";
+    const s = jp(n) + " 回";
+    return n >= 2 ? s + "（" + jp(n/2) + " 往復）" : s;
+  }
+  function hint(cm){
+    if (cm < 1){
+      for (const [n,len] of SMALL) if (cm >= len) return "1秒で進むのは、" + n + "（" + fmtLen(len) + "）の約" + sig(cm/len,2) + "倍";
+      const [n,len] = SMALL[SMALL.length-1];
+      return "1秒で進むのは、" + n + "（" + fmtLen(len) + "）のわずか" + sig(len/cm,2) + "分の1";
+    }
+    if (cm < 170) return "";
+    let s = "";
+    for (const [n,len] of BIG) if (cm >= len){ s = "1秒で" + n + "の約" + jp(cm/len) + "倍進みます"; break; }
+    if (cm > LIGHT) s += "。これは光の速さの約" + jp(cm/LIGHT) + "倍で、現実にはありえない速さです";
+    return s;
+  }
+
+  // ---- 状態 ----
+  let t = 0, running = false, last = 0, raf = 0;
+  const S = () => ({
+    b: +baseSel.value,
+    v: parseFloat($("speed").value),
+    L: parseFloat($("course").value),
+    T: parseFloat($("dur").value),
+    est: document.querySelector('input[name=est]:checked').value
+  });
+  const lat = (d, est) => est === "lo" ? d.lo : est === "hi" ? d.hi : (d.lo + d.hi)/2;
+
+  function render(){
+    const {b, v, L, T, est} = S();
+    $("speedOut").textContent = sig(v);
+    $("courseOut").textContent = L;
+    $("durOut").textContent = sig(T);
+    $("baseNote").textContent = DEV[b].name + "がコースを片道 " + fmtDur(L/v) + " で走ります";
+    $("clock").textContent = t.toFixed(2);
+    $("clockOf").textContent = "/ " + sig(T) + " 秒";
+    $("bar").style.width = Math.min(t/T,1)*100 + "%";
+    const baseLat = lat(DEV[b], est);
+    rows.forEach((r,i) => {
+      const ns = lat(r.d, est);
+      const sp = v * baseLat / ns;           // cm/秒
+      const d = sp * t;                       // 走った距離
+      const ph = d % (2*L);
+      const back = ph > L;
+      const p = back ? 2*L - ph : ph;
+      const pct = p / L * 100;
+      r.el.classList.toggle("base", i === b);
+      r.el.classList.toggle("blur", sp / 60 > L / 2); // 1フレームで半往復以上進む
+      r.track.style.setProperty("--n", L);
+      r.mid.textContent = (L/2) + "cm";
+      r.end.textContent = L + "cm";
+      r.lat.textContent = "1回 " + fmtNs(ns);
+      r.speed.textContent = fmtLen(sp);
+      r.dist.textContent = fmtLen(d);
+      r.trips.textContent = t === 0 ? "—" : fmtTrips(d / L);
+      r.one.textContent = fmtDur(L / sp);
+      r.fill.style.width = pct + "%";
+      r.runner.style.left = pct + "%";
+      r.runner.classList.toggle("back", back);
+      r.hint.textContent = hint(sp);
+    });
+    let st;
+    if (running) st = "走行中";
+    else if (t === 0) st = "スタート前";
+    else if (t >= T - 1e-9) st = sig(T) + "秒たった時点で停止中";
+    else st = "一時停止中";
+    $("status").textContent = st;
+    $("run").textContent = running ? "一時停止" : (t > 0 && t < T - 1e-9 ? "再開" : "スタート");
+  }
+
+  function tick(now){
+    t += (now - last) / 1000; last = now;
+    const {T} = S();
+    if (t >= T){ t = T; stop(); render(); return; }
+    render();
+    raf = requestAnimationFrame(tick);
+  }
+  function start(){
+    if (t >= S().T - 1e-9) t = 0;
+    running = true; last = performance.now();
+    raf = requestAnimationFrame(tick); render();
+  }
+  function stop(){ running = false; cancelAnimationFrame(raf); }
+
+  $("run").addEventListener("click", () => { running ? (stop(), render()) : start(); });
+  $("reset").addEventListener("click", () => { stop(); t = 0; render(); });
+  ["speed","course"].forEach(id => $(id).addEventListener("input", render));
+  $("dur").addEventListener("input", () => { if (t > S().T) t = S().T; render(); });
+  baseSel.addEventListener("change", render);
+  document.querySelectorAll('input[name=est]').forEach(e => e.addEventListener("change", render));
+
+  // 最初は「走らせる時間が終わった時点」を表示しておく
+  t = S().T;
+  render();
+})();
+</script>
+
+</body>
+</html>
