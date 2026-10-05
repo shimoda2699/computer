@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="description" content="部品を組み合わせてPCを組み立て、電源を入れて起動させるグループ対抗ゲーム。足りない部品があると実機と同じようなエラーが出ます。">
+<title>PC組み立てチャレンジ</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DotGothic16&family=VT323&family=Zen+Kaku+Gothic+New:wght@400;500;700&display=swap">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<div class="app">
+  <header class="hud">
+    <h1 class="title">PC組み立てチャレンジ</h1>
+    <dl class="hud-stats">
+      <div><dt>グループ</dt><dd id="hudGroup">—</dd></div>
+      <div><dt>作業時間</dt><dd class="num" id="hudTime">0:00</dd></div>
+      <div><dt>ペナルティ</dt><dd class="num" id="hudPen">+0秒</dd></div>
+      <div><dt>電源投入</dt><dd class="num" id="hudTries">0回</dd></div>
+    </dl>
+    <div class="hud-actions">
+      <a class="btn ghost" href="../index.html">シリーズのトップ</a>
+      <button type="button" class="btn ghost" id="soundBtn" aria-pressed="true">音 ON</button>
+      <button type="button" class="btn ghost" id="restartBtn">最初から</button>
+      <button type="button" class="btn power" id="powerBtn" disabled>
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v8M6.3 6.8a8 8 0 1 0 11.4 0" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></svg>
+        <span id="powerLabel">電源ON</span>
+      </button>
+    </div>
+  </header>
+
+  <main class="layout">
+    <section class="stage-col" aria-label="作業台">
+      <div class="stage" id="stage">
+        <img class="bg" src="images/workbench.svg" alt="電源ユニットだけが入ったPCケースと作業台">
+        <div class="layer" id="placedLayer"></div>
+        <svg class="layer cables" id="cableLayer" viewBox="0 0 1200 720" preserveAspectRatio="none" aria-hidden="true"></svg>
+        <div class="layer targets" id="targetLayer"></div>
+        <div class="board-leds" id="boardLeds" hidden>
+          <span data-led="0"></span><span data-led="1"></span><span data-led="2"></span><span data-led="3"></span>
+        </div>
+        <span class="case-led" id="caseLed" aria-hidden="true"></span>
+        <button type="button" class="psu-switch" id="psuSwitch" aria-pressed="false" title="電源ユニットのスイッチ">
+          <span class="rocker"><i>｜</i><i>○</i></span>
+        </button>
+        <div class="screen" id="screen" hidden title="クリックで拡大"></div>
+      </div>
+      <p class="help">部品をドラッグして取り付けます（クリックで選んでから、置き場所をクリックしてもOK）。取り付けた部品をクリックすると外せます。電源ユニット背面のスイッチ（左下）も忘れずに。</p>
+    </section>
+
+    <aside class="tray" aria-label="部品箱">
+      <div class="tabs" id="tabs" role="tablist"></div>
+      <div class="cards" id="cards"></div>
+    </aside>
+  </main>
+
+  <section class="below">
+    <div class="panel status">
+      <h2>状況</h2>
+      <p id="obs" class="obs">スタートを押すと始まります。</p>
+      <div class="led-row" aria-label="マザーボードの診断ランプ">
+        <span class="led-title">診断ランプ</span>
+        <span class="led" data-led="0"><i></i>CPU</span>
+        <span class="led" data-led="1"><i></i>DRAM</span>
+        <span class="led" data-led="2"><i></i>VGA</span>
+        <span class="led" data-led="3"><i></i>BOOT</span>
+      </div>
+      <div class="hint-box">
+        <button type="button" class="btn small" id="hintBtn" disabled>ヒントを見る</button>
+        <p id="hintText" class="hint-text" hidden></p>
+      </div>
+    </div>
+    <div class="panel">
+      <h2>電源投入の記録</h2>
+      <ol class="log" id="log"><li class="empty">まだ電源を入れていません。</li></ol>
+    </div>
+  </section>
+</div>
+
+<!-- スタート画面 -->
+<div class="modal" id="startModal" role="dialog" aria-modal="true" aria-labelledby="startTitle">
+  <div class="sheet">
+    <h2 id="startTitle" class="sheet-title">PC組み立てチャレンジ</h2>
+    <p>電源ユニットだけが入ったケースに部品を取り付けて、PCを完成させよう。電源を入れてデスクトップ画面が表示されたらクリアです。</p>
+    <ul class="rules">
+      <li>部品が足りないと、電源を入れたときに英語のメッセージ・ビープ音・診断ランプでトラブルが知らされます。英語を読んで原因を考えよう。</li>
+      <li>部品箱には、このマザーボードに合わない部品もまざっています。仕様をよく見て選ぼう。</li>
+      <li>記録タイムは作業時間にペナルティを足したものです。</li>
+    </ul>
+    <table class="pen-table" id="penTable"></table>
+    <form id="startForm" class="start-form">
+      <label for="groupName">グループ名</label>
+      <input id="groupName" type="text" maxlength="20" placeholder="例：1班" autocomplete="off" required>
+      <fieldset>
+        <legend>モード</legend>
+        <label class="radio"><input type="radio" name="mode" id="modeGuide" value="guide" checked> ガイドあり（取り付け場所が光る）</label>
+        <label class="radio"><input type="radio" name="mode" id="modeHard" value="hard"> ガイドなし（場所も自分で考える）</label>
+      </fieldset>
+      <div class="sheet-actions">
+        <button type="button" class="btn ghost-dark" id="cancelStart" hidden>閉じる</button>
+        <button type="submit" class="btn primary">スタート</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- 結果画面 -->
+<div class="modal" id="resultModal" hidden role="dialog" aria-modal="true" aria-labelledby="resultTitle">
+  <div class="sheet wide">
+    <p class="eyebrow">起動成功</p>
+    <h2 id="resultTitle" class="sheet-title"><span id="resGroup"></span> の記録</h2>
+    <p class="big-time num" id="resTime">0:00.0</p>
+    <table class="breakdown" id="resTable"></table>
+    <h3>出会ったトラブルと解説</h3>
+    <ul class="troubles" id="resTroubles"></ul>
+    <textarea id="copyArea" class="copy-area" readonly hidden></textarea>
+    <div class="sheet-actions">
+      <button type="button" class="btn ghost-dark" id="copyBtn">記録をコピー</button>
+      <button type="button" class="btn ghost-dark" id="againBtn">もう一度</button>
+      <a class="btn primary" href="../memory-race.html">次へ：② 速さをくらべる →</a>
+    </div>
+  </div>
+</div>
+
+<!-- 画面の拡大 -->
+<div class="modal" id="zoomModal" hidden role="dialog" aria-modal="true" aria-label="モニター画面の拡大">
+  <div class="zoom-wrap">
+    <div class="screen big" id="zoomScreen"></div>
+    <button type="button" class="btn primary" id="zoomClose">閉じる</button>
+  </div>
+</div>
+
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<script src="js/data.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>

@@ -1,712 +1,761 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>CPUが命令を実行する仕組み（2進数版）</title>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="description" content="CPUがメインメモリから命令とデータを読み出し、フェッチ・デコード・実行をくり返す様子を1ステップずつ見られるシミュレータ">
+<title>CPUが命令を実行するしくみ</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DotGothic16&family=IBM+Plex+Mono:wght@500;600&family=Zen+Kaku+Gothic+New:wght@400;500;700&display=swap">
 <style>
-    * {box-sizing: border-box;}
-    body {font-family: Arial, sans-serif;text-align: center;background-color: #f0f0f0;font-size: 13px;margin: 0;padding: 6px 10px;}
-    h1 {font-size: 1.15em;margin: 4px 0;}
-    h2 {margin: 0 0 4px;font-size: 0.95em;}
-    h3 {margin: 6px 0 3px;font-size: 0.82em;}
-    #note {max-width: 900px;margin: 4px auto 0;color: #555;font-size: 0.72em;text-align: left;line-height: 1.35;}
-    .tab-buttons {margin-top: 8px;}
-    .tab-btn {padding: 5px 12px;margin: 0 3px;font-size: 0.85em;border: 1px solid #888;background-color: #e0e0e0;cursor: pointer;border-radius: 4px 4px 0 0;}
-    .tab-btn.active {background-color: #fff;border-bottom: 3px solid #2a6df4;font-weight: bold;}
-    .tab-panel[hidden] {display: none;}
-    .run-controls {display: flex;align-items: center;justify-content: center;gap: 10px;margin: 6px auto 0;padding: 5px 10px;background-color: #eef2ff;border: 1px solid #b9c6f5;border-radius: 4px;max-width: 640px;font-size: 0.8em;}
-    .run-controls input[type="range"] {width: 140px;vertical-align: middle;}
-    #playBtn {padding: 4px 14px;font-size: 0.9em;cursor: pointer;}
-    .panel-note {max-width: 900px;margin: 6px auto 0;color: #444;font-size: 0.72em;text-align: left;background-color: #fffbe6;border: 1px solid #e0d38a;padding: 5px 8px;border-radius: 4px;line-height: 1.35;}
-    .simulation {display: flex;justify-content: center;margin-top: 8px;flex-wrap: wrap;gap: 8px;}
-    .cpu-box, .memory-box {border: 1px solid #000;padding: 8px;margin: 0;background-color: #fff;min-width: 175px;text-align: left;}
-    .cpu-box {display: flex;flex-direction: column;background-color: #e6ffe6;gap: 6px;}
-    .control-unit, .alu-container {border: 1px solid #000;padding: 6px 8px;margin: 0;background-color: #fff;min-width: 165px;}
-    .control-unit {background-color: #ffcccc;}
-    .alu-container {background-color: #cce5ff;}
-    .memory-box {background-color: #f6f9e8;color: #004d00;padding: 8px 10px;font-size: 0.9em;min-width: 230px;}
-    .memory-box .memory-cell {display: flex;align-items: center;justify-content: space-between;border: 1px solid #000;padding: 3px 6px;margin: 2px 0;background-color: #fff;font-size: 0.85em;}
-    .memory-box .address {width: 34px;color: #ff0000;font-weight: bold;}
-    .highlight {animation: blink 1s step-start infinite;}
-    @keyframes blink {50% {background-color: yellow;}}
-    .memory-box .data-input {display: flex;justify-content: space-between;align-items: center;border: 1px solid #000;padding: 3px 6px;margin: 2px 0;background-color: #fff;font-size: 0.85em;gap: 4px;}
-    .memory-box .data-input span:first-child {width: 34px;font-weight: bold;}
-    .memory-box .data-input input, .memory-box .data-input span.mem-out {width: 62px;text-align: right;font-size: 0.95em;}
-    .op-select {font-family: inherit;font-size: 0.85em;padding: 1px;}
-    .register {margin: 3px 0;padding: 3px 6px;border: 1px solid #000;background-color: #f0f0f0;font-size: 0.85em;}
-    .phase-indicator {font-weight: bold;background-color: #fff3cd;}
-    .decoded-info {font-size: 0.78em;background-color: #eef;text-align: left;}
-    .alu {border: 2px solid #000;padding: 8px;margin-top: 4px;text-align: center;font-weight: bold;background-color: #e0e0e0;font-size: 0.9em;}
-    .alu-note {font-size: 0.68em;color: #555;margin: 4px 0 0;text-align: left;line-height: 1.3;}
-    button.step-btn {padding: 5px 14px;margin-top: 6px;margin-left: 6px;font-size: 0.85em;}
-    .button-container {display: flex;justify-content: center;margin-top: 6px;}
+/* Layout: 左にメインメモリ、中央にバス、右にCPU。下に「いま起きていること」と記録。シリーズ共通の配色 */
+:root {
+  --paper: #e9edf0; --panel: #ffffff; --ink: #1b252e; --muted: #586572; --line: #cdd5dc;
+  --accent: #d9480f; --accent-soft: #fde6d9; --ok: #2b8a3e; --bad: #c92a2a; --bad-soft: #fbe4e4;
+  --hud: #1f2a33; --hud-ink: #eef2f5; --hud-muted: #9fb0be;
+  --mem: #2f55c4; --mem-soft: #e6ecfb; --ctrl: #b4432f; --ctrl-soft: #fbe9e5; --alu: #0a7d74; --alu-soft: #e1f3f1;
+  --hl: #ffd43b; --hl-soft: #fff4c2;
+  --f-display: "DotGothic16", "Zen Kaku Gothic New", "Hiragino Sans", "Yu Gothic", sans-serif;
+  --f-body: "Zen Kaku Gothic New", "Hiragino Sans", "Yu Gothic", "Meiryo", sans-serif;
+  --f-code: "IBM Plex Mono", "Consolas", "Menlo", monospace;
+  color-scheme: light;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+[hidden] { display: none !important; }
+body { background: var(--paper); color: var(--ink); font-family: var(--f-body); font-size: 16px; line-height: 1.65; }
+button, input, select { font: inherit; }
+.num { font-variant-numeric: tabular-nums; }
+.wrap { max-width: 1200px; margin: 0 auto; padding-inline: 16px; padding-block: 12px 40px; display: grid; gap: 14px; }
+
+.series { background: var(--hud); color: var(--hud-ink); border-radius: 10px; padding: 8px 12px; display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px; }
+.series .home { color: var(--hud-ink); font-family: var(--f-display); text-decoration: none; font-size: 1.05rem; margin-right: 4px; }
+.series ol { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px; }
+.series a.step { display: inline-flex; align-items: center; gap: 6px; color: var(--hud-muted); text-decoration: none; padding: 4px 10px; border-radius: 99px; font-size: .88rem; font-weight: 700; border: 1px solid #3b4955; }
+.series a.step b { display: inline-grid; place-items: center; width: 1.5em; height: 1.5em; border-radius: 50%; background: #3b4955; color: var(--hud-ink); font-size: .8rem; }
+.series a.step[aria-current="page"] { color: #fff; background: var(--accent); border-color: var(--accent); }
+.series a.step[aria-current="page"] b { background: #fff; color: var(--accent); }
+.series a:focus-visible { outline: 3px solid var(--hl); outline-offset: 2px; }
+
+h1 { font-family: var(--f-display); font-weight: 400; font-size: clamp(1.6rem, 4vw, 2.3rem); line-height: 1.25; margin: 4px 0 0; text-wrap: balance; }
+.lead { margin: 0; color: var(--muted); max-width: 70ch; }
+
+.tabs { display: flex; flex-wrap: wrap; gap: 6px; }
+.tab { border: 1px solid var(--line); background: var(--panel); color: var(--ink); padding: 8px 14px; border-radius: 10px; font-weight: 700; cursor: pointer; display: inline-flex; gap: 8px; align-items: center; }
+.tab small { font-weight: 500; color: var(--muted); }
+.tab[aria-selected="true"] { background: var(--ink); color: #fff; border-color: var(--ink); }
+.tab[aria-selected="true"] small { color: #c9d3dc; }
+.tab:focus-visible, .btn:focus-visible, select:focus-visible, input:focus-visible { outline: 3px solid var(--hl); outline-offset: 2px; }
+
+.mission { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 12px 16px; display: flex; flex-wrap: wrap; gap: 8px 18px; align-items: center; }
+.mission p { margin: 0; flex: 1 1 32ch; }
+.mission .opts { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: .9rem; }
+.mission label { display: inline-flex; gap: 6px; align-items: center; cursor: pointer; }
+.mission input[type=checkbox] { accent-color: var(--accent); width: 17px; height: 17px; }
+
+/* ---- シミュレータ ---- */
+.sim { position: relative; display: grid; grid-template-columns: minmax(0, 1.05fr) 64px minmax(0, 1fr); gap: 0; align-items: stretch; }
+.box { background: var(--panel); border: 2px solid var(--line); border-radius: 14px; padding: 12px 14px; display: grid; gap: 8px; align-content: start; min-width: 0; }
+.box > h2 { margin: 0; font-family: var(--f-display); font-weight: 400; font-size: 1.25rem; display: flex; align-items: center; gap: 8px; }
+.box > h2 small { font-family: var(--f-body); font-size: .8rem; color: var(--muted); }
+.mem { border-color: var(--mem); }
+.mem > h2 { color: var(--mem); }
+.cpu { border-color: var(--ink); background: #f7f9fa; }
+.area { font-size: .8rem; font-weight: 700; color: var(--muted); letter-spacing: .06em; margin-top: 2px; }
+.cells { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
+.cell { display: grid; grid-template-columns: 2.6rem 3.2rem minmax(0, 1fr); gap: 2px 8px; align-items: center; border: 1px solid var(--line); border-radius: 8px; padding: 4px 8px; background: var(--panel); min-height: 2.4rem; position: relative; transition: background .2s, border-color .2s; }
+.cell .pcm { font-size: .72rem; font-weight: 700; color: var(--ctrl); visibility: hidden; white-space: nowrap; }
+.cell.pc .pcm { visibility: visible; }
+.cell.pc { border-color: var(--ctrl); }
+.cell .addr { font-family: var(--f-code); font-weight: 600; color: var(--mem); }
+.cell .code { font-family: var(--f-code); font-weight: 600; font-size: .95rem; white-space: nowrap; }
+.cell .mean { grid-column: 3; font-size: .78rem; color: var(--muted); line-height: 1.35; }
+.hide-mean .cell .mean { display: none; }
+.cell select { font-family: var(--f-code); font-weight: 600; font-size: .9rem; padding: 1px 2px; border: 1px solid var(--line); border-radius: 6px; background: #fff; }
+.dcell { grid-template-columns: 2.6rem 3.2rem minmax(0, 1fr); }
+.dval { display: flex; flex-wrap: wrap; gap: 4px 8px; align-items: center; min-width: 0; }
+.dval input { width: 7.2em; font-family: var(--f-code); font-weight: 600; font-size: .95rem; padding: 2px 6px; border: 1px solid var(--line); border-radius: 6px; text-align: right; }
+.dval input.invalid { border-color: var(--bad); background: var(--bad-soft); }
+.dval input:disabled { background: var(--paper); color: var(--ink); }
+.dval .out { font-family: var(--f-code); font-weight: 600; font-size: .95rem; min-width: 4em; }
+.dval .dec { font-size: .8rem; color: var(--muted); }
+.dval .role { font-size: .78rem; color: var(--muted); flex-basis: 100%; line-height: 1.3; }
+.hide-dec .dec { display: none; }
+
+.bus { position: relative; display: grid; place-items: center; }
+.bus::before { content: ""; position: absolute; left: 6px; right: 6px; top: 12%; bottom: 12%; background: repeating-linear-gradient(0deg, #c4ccd4 0 8px, #d6dce2 8px 16px); border-radius: 8px; }
+.bus span { position: relative; writing-mode: vertical-rl; font-weight: 700; font-size: .85rem; color: var(--muted); background: var(--paper); padding: 6px 2px; border-radius: 6px; letter-spacing: .2em; }
+
+.unit { border-radius: 10px; padding: 8px 10px; display: grid; gap: 6px; }
+.unit h3 { margin: 0; font-size: .95rem; display: flex; align-items: baseline; gap: 6px; }
+.unit h3 small { font-weight: 500; font-size: .75rem; color: var(--muted); }
+.ctrl { background: var(--ctrl-soft); }
+.ctrl h3 { color: var(--ctrl); }
+.calc { background: var(--alu-soft); }
+.calc h3 { color: var(--alu); }
+.reg { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 2px 8px; align-items: baseline; background: #fff; border: 1px solid var(--line); border-radius: 8px; padding: 4px 10px; transition: background .2s, border-color .2s; }
+.reg .rn { font-weight: 700; font-size: .9rem; }
+.reg .rn small { display: block; font-weight: 500; font-size: .74rem; color: var(--muted); line-height: 1.25; }
+.reg .rv { font-family: var(--f-code); font-weight: 600; font-size: 1.05rem; text-align: right; }
+.reg .rv .dec { display: block; font-family: var(--f-body); font-size: .76rem; color: var(--muted); font-weight: 500; }
+.regs { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 140px), 1fr)); gap: 6px; }
+.regs .reg { grid-template-columns: minmax(0, 1fr); align-content: start; }
+.regs .reg .rv { text-align: left; font-size: 1.15rem; }
+.regs .reg .rn small { display: inline; margin-left: 4px; }
+.decode { background: #fff; border: 1px dashed var(--ctrl); border-radius: 8px; padding: 6px 10px; font-size: .86rem; min-height: 3.2em; }
+.decode .k { display: inline-block; font-size: .72rem; font-weight: 700; color: #fff; background: var(--ctrl); border-radius: 4px; padding: 0 6px; margin-right: 6px; }
+.decode code { font-family: var(--f-code); font-weight: 600; }
+.alu-box { position: relative; margin-inline: auto; width: min(260px, 100%); background: var(--alu); color: #fff; clip-path: polygon(0 0, 38% 0, 50% 22%, 62% 0, 100% 0, 82% 100%, 18% 100%); padding: 18px 10px 10px; text-align: center; transition: filter .2s; }
+.alu-box b { display: block; font-size: .85rem; letter-spacing: .08em; }
+.alu-box .expr { font-family: var(--f-code); font-weight: 600; font-size: 1rem; min-height: 1.5em; }
+.alu-note { margin: 0; font-size: .75rem; color: var(--muted); line-height: 1.4; }
+
+.hl { background: var(--hl-soft) !important; border-color: #e0a800 !important; box-shadow: 0 0 0 3px rgba(255, 212, 59, .55); }
+.alu-box.hl { filter: drop-shadow(0 0 6px #ffd43b) brightness(1.08); box-shadow: none; }
+
+.packet { position: absolute; z-index: 20; left: 0; top: 0; pointer-events: none; padding: 3px 10px; border-radius: 99px; font-family: var(--f-code); font-weight: 600; font-size: .9rem; color: #fff; white-space: nowrap; box-shadow: 0 4px 10px rgba(0,0,0,.25); transform: translate(-50%, -50%); }
+.packet.inst { background: var(--ctrl); }
+.packet.data { background: var(--mem); }
+.packet.calc { background: var(--alu); }
+
+/* ---- 段階とことば ---- */
+.stage { position: sticky; bottom: calc(8px + env(safe-area-inset-bottom, 0px)); z-index: 30; display: grid; gap: 8px; background: var(--panel); border: 2px solid var(--ink); border-radius: 12px; padding: 12px 16px; box-shadow: 0 6px 20px rgba(27, 37, 46, .18); }
+.phases { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.ph { display: inline-flex; align-items: center; gap: 6px; border: 2px solid var(--line); border-radius: 99px; padding: 3px 12px; font-weight: 700; color: var(--muted); font-size: .92rem; }
+.ph b { display: inline-grid; place-items: center; width: 1.5em; height: 1.5em; border-radius: 50%; background: var(--paper); font-size: .8rem; }
+.ph.on { color: #fff; background: var(--ink); border-color: var(--ink); }
+.ph.on b { background: var(--accent); color: #fff; }
+.arrow { color: var(--muted); }
+.say { margin: 0; font-size: 1.1rem; font-weight: 500; min-height: 3.1em; line-height: 1.5; }
+.say.end { color: var(--ok); font-weight: 700; }
+.say.err { color: var(--bad); font-weight: 700; }
+.controls { display: flex; flex-wrap: wrap; gap: 8px 10px; align-items: center; }
+.btn { border: 1px solid var(--line); background: var(--panel); color: var(--ink); border-radius: 10px; padding: 9px 16px; font-weight: 700; cursor: pointer; }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+.btn:disabled { opacity: .45; cursor: default; }
+.speed { display: inline-flex; gap: 8px; align-items: center; font-size: .85rem; color: var(--muted); }
+.speed input { accent-color: var(--accent); width: 140px; }
+
+/* ---- 集計と記録 ---- */
+.bottom { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.3fr); gap: 14px; align-items: start; }
+.panel { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; display: grid; gap: 10px; min-width: 0; }
+.panel h2 { margin: 0; font-family: var(--f-display); font-weight: 400; font-size: 1.15rem; }
+.stats { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin: 0; }
+.stats div { background: var(--paper); border-radius: 10px; padding: 8px 12px; }
+.stats dt { font-size: .78rem; color: var(--muted); font-weight: 700; }
+.stats dd { margin: 0; font-size: 1.5rem; font-weight: 700; font-variant-numeric: tabular-nums; line-height: 1.2; }
+.stats dd small { font-size: .8rem; color: var(--muted); font-weight: 500; }
+.stats .memstat dd { color: var(--mem); }
+.wait { background: var(--accent-soft); border-radius: 10px; padding: 10px 14px; font-size: .92rem; }
+.wait p { margin: 0; }
+.wait a { color: var(--accent); font-weight: 700; }
+.trace-wrap { overflow-x: auto; max-height: 340px; overflow-y: auto; border: 1px solid var(--line); border-radius: 8px; }
+.trace { border-collapse: collapse; width: 100%; font-size: .85rem; }
+.trace th, .trace td { padding: 4px 8px; border-bottom: 1px solid var(--line); text-align: left; white-space: nowrap; }
+.trace th { position: sticky; top: 0; background: var(--paper); font-size: .78rem; }
+.trace td.c { font-family: var(--f-code); font-weight: 600; }
+.trace td.n { text-align: right; font-variant-numeric: tabular-nums; }
+.trace tr.jump td { background: var(--ctrl-soft); }
+.trace .empty td { color: var(--muted); white-space: normal; }
+.think { margin: 0; padding-left: 1.3em; display: grid; gap: 6px; }
+.next { display: flex; flex-wrap: wrap; gap: 10px 18px; align-items: center; justify-content: space-between; background: var(--hud); color: var(--hud-ink); border-radius: 12px; padding: 14px 18px; }
+.next p { margin: 0; max-width: 64ch; }
+.next .links { display: flex; flex-wrap: wrap; gap: 8px; }
+.next a { background: var(--accent); color: #fff; text-decoration: none; font-weight: 700; padding: 10px 16px; border-radius: 10px; white-space: nowrap; }
+.next a.sub { background: transparent; border: 1px solid #4b5965; color: var(--hud-ink); }
+.next a:focus-visible { outline: 3px solid var(--hl); outline-offset: 2px; }
+footer { font-size: .8rem; color: var(--muted); }
+footer p { margin: 0; max-width: 90ch; }
+
+@media (max-width: 860px) {
+  .sim { grid-template-columns: minmax(0, 1fr); }
+  .bus { height: 54px; }
+  .bus::before { left: 12%; right: 12%; top: 6px; bottom: 6px; background: repeating-linear-gradient(90deg, #c4ccd4 0 8px, #d6dce2 8px 16px); }
+  .bus span { writing-mode: horizontal-tb; padding: 2px 10px; }
+  .bottom { grid-template-columns: minmax(0, 1fr); }
+}
+@media (prefers-reduced-motion: reduce) { .packet { display: none; } }
 </style>
 </head>
 <body>
-<h1>CPUが命令を実行する仕組み（2進数版）</h1>
-<p id="note">※ このシミュレーションでは命令を分かりやすい文字列（ニーモニック）で表示していますが、実際のコンピュータでは命令もデータと同じように2進数（機械語）としてメモリに格納されています。また、CPUは「フェッチ（取り出し）→デコード（解読）→実行」という手順を1つの命令ごとに繰り返しています。</p>
+<div class="wrap">
+  <nav class="series" aria-label="シリーズ：コンピュータのしくみ">
+    <a class="home" href="index.html">コンピュータのしくみ</a>
+    <ol>
+      <li><a class="step" href="pc-build/index.html"><b>1</b>PCを組み立てる</a></li>
+      <li><a class="step" href="memory-race.html"><b>2</b>速さをくらべる</a></li>
+      <li><a class="step" href="calculater.html" aria-current="page"><b>3</b>命令を実行する</a></li>
+    </ol>
+  </nav>
 
-<div class="tab-buttons">
-    <button id="tabBtnA" class="tab-btn active" onclick="showTab('a')">基本編（分岐なし）</button>
-    <button id="tabBtnB" class="tab-btn" onclick="showTab('b')">応用編：掛け算（ループ・分岐）</button>
-    <button id="tabBtnC" class="tab-btn" onclick="showTab('c')">発展編：割り算（比較・分岐）</button>
-</div>
+  <header>
+    <h1>CPUが命令を実行するしくみ</h1>
+    <p class="lead">プログラムの「命令」も、計算に使う「データ」も、メインメモリに2進数で入っています。CPUはそれを1つずつ読み出して、<b>①取り出す（フェッチ）→ ②解読する（デコード）→ ③実行する</b> をくり返しています。「次へ」を押して、1ステップずつ見てみよう。</p>
+  </header>
 
-<div class="run-controls">
-    <span>連続実行の速度：</span>
-    <input type="range" id="speedRange" min="80" max="1200" step="20" value="400" oninput="onSpeedChange()">
-    <span id="speedLabel">400ms/ステップ</span>
-    <button id="playBtn" onclick="togglePlay()">▶ 連続実行</button>
-</div>
+  <div class="tabs" role="tablist" aria-label="レベル" id="tabs"></div>
 
-<!-- ================= 基本編 ================= -->
-<div id="a_panel" class="tab-panel">
-    <div class="simulation">
-        <div class="cpu-box">
-            <h2>CPU</h2>
-            <div class="control-unit">
-                <h2>制御装置</h2>
-                <div id="a_programCounter" class="register">プログラムカウンタ: <span id="a_pcValue">0</span></div>
-                <div id="a_instructionRegister" class="register">命令レジスタ: <span id="a_irValue"></span></div>
-                <div class="register phase-indicator">フェーズ: <span id="a_phaseValue">-</span></div>
-                <div class="register decoded-info">デコード結果: <span id="a_decodedValue">-</span></div>
-            </div>
-
-            <div class="alu-container">
-                <h2>演算装置</h2>
-                <div id="a_registerA" class="register">レジスタA: <span id="a_valueA">0</span></div>
-                <div id="a_registerB" class="register">レジスタB: <span id="a_valueB">0</span></div>
-                <div id="a_registerC" class="register">レジスタC: <span id="a_valueC">0</span></div>
-                <div id="a_alu" class="alu">ALU <br>（算術論理演算装置）: <span id="a_result">0</span></div>
-                <p class="alu-note">※ ALUは加算・減算などの演算を行うときだけ使われます。READ／WRITE命令はメモリとレジスタの間でデータを転送するだけなので、ALUは使いません。</p>
-            </div>
-        </div>
-
-        <div id="a_memory" class="memory-box">
-            <h2>主記憶装置(メモリ)</h2>
-            <h3>命令格納領域（2番地はADD／SUBを選択できます）</h3>
-            <div class="memory-cell"><span class="address">0</span><span class="instruction">READ A, 100</span></div>
-            <div class="memory-cell"><span class="address">1</span><span class="instruction">READ B, 101</span></div>
-            <div class="memory-cell"><span class="address">2</span><span class="instruction">
-                <select id="a_opSelect" class="op-select">
-                    <option value="ADD A, B">ADD A, B（加算）</option>
-                    <option value="SUB A, B">SUB A, B（減算）</option>
-                </select>
-            </span></div>
-            <div class="memory-cell"><span class="address">3</span><span class="instruction">WRITE C, 102</span></div>
-            <div class="memory-cell"><span class="address">4</span><span class="instruction">STOP</span></div>
-
-            <h3>データ格納領域（2進数入力）</h3>
-            <div id="a_dataInput100" class="data-input">
-                <span>100</span><input type="text" id="a_mem100" value="1010">
-                <span style="width:auto;font-weight:normal;font-size:0.85em;color:#555;">← A</span>
-            </div>
-            <div id="a_dataInput101" class="data-input">
-                <span>101</span><input type="text" id="a_mem101" value="101">
-                <span style="width:auto;font-weight:normal;font-size:0.85em;color:#555;">← B</span>
-            </div>
-            <div id="a_dataInput102" class="data-input">
-                <span>102</span><span class="mem-out" id="a_mem102">0</span>
-                <span style="width:auto;font-weight:normal;font-size:0.85em;color:#555;">← 計算結果</span>
-            </div>
-        </div>
+  <div class="mission">
+    <p id="summary"></p>
+    <div class="opts">
+      <label><input type="checkbox" id="optMean" checked> 命令の意味を表示</label>
+      <label><input type="checkbox" id="optDec" checked> 10進数も表示</label>
     </div>
+  </div>
 
-    <div class="button-container">
-        <button class="step-btn" onclick="stopPlay(); simA.next();">処理を1つずつ実行</button>
-        <button class="step-btn" onclick="stopPlay(); simA.reset();">初期化</button>
+  <div class="sim" id="sim">
+    <section class="box mem" aria-label="メインメモリ">
+      <h2>メインメモリ <small>番地ごとに命令やデータが入っている</small></h2>
+      <div class="area">プログラム（命令）</div>
+      <ol class="cells" id="prog"></ol>
+      <div class="area">データ（2進数で入力できます）</div>
+      <ol class="cells" id="data"></ol>
+    </section>
+    <div class="bus" aria-hidden="true"><span>バス（データの通り道）</span></div>
+    <section class="box cpu" aria-label="CPU">
+      <h2>CPU</h2>
+      <div class="unit ctrl">
+        <h3>制御装置 <small>命令を取り出して解読し、指示を出す</small></h3>
+        <div class="reg" id="regPC"><span class="rn">プログラムカウンタ（PC）<small>次に実行する命令の番地</small></span><span class="rv" id="vPC">0</span></div>
+        <div class="reg" id="regIR"><span class="rn">命令レジスタ（IR）<small>いま実行中の命令</small></span><span class="rv" id="vIR">—</span></div>
+        <div class="decode" id="decode"><span class="k">解読</span>—</div>
+      </div>
+      <div class="unit calc">
+        <h3>演算装置 <small>計算や比較をする</small></h3>
+        <div class="regs" id="regs"></div>
+        <div class="alu-box" id="alu"><b>ALU（算術論理演算装置）</b><div class="expr" id="aluExpr">—</div></div>
+        <p class="alu-note">ALUを使うのは、計算や比較をする命令だけです。READ・WRITEはメモリとレジスタの間でデータを運ぶだけなので、ALUは使いません。</p>
+      </div>
+    </section>
+  </div>
+
+  <section class="stage" aria-label="いま起きていること">
+    <div class="phases" aria-hidden="true">
+      <span class="ph" id="ph1"><b>1</b>取り出す（フェッチ）</span><span class="arrow">→</span>
+      <span class="ph" id="ph2"><b>2</b>解読する（デコード）</span><span class="arrow">→</span>
+      <span class="ph" id="ph3"><b>3</b>実行する</span>
     </div>
-</div>
-
-<!-- ================= 応用編 ================= -->
-<div id="b_panel" class="tab-panel" hidden>
-    <p class="panel-note">※ 応用編では「ACC（レジスタCに加算して累積）」「DEC（レジスタを1減らす）」「JNZ（レジスタが0でなければ指定アドレスへジャンプ）」という命令を追加しています。JNZが実行されると、フェッチの直後に一度更新されたはずのプログラムカウンタ(PC)が、命令の実行結果（レジスタDの値）によって再び書き換えられます。この「PCが書き換わることで同じ命令を繰り返し実行できる」という点が、ループ処理の正体であり、PCレジスタの本当の役割です。このプログラムはB(加算する値)をD(回数)だけレジスタCに繰り返し足し込む処理で、実行のたびにCの値が2進数で増えていく様子が見えます（B×Dの掛け算を足し算の繰り返しで計算しています）。</p>
-    <div class="simulation">
-        <div class="cpu-box">
-            <h2>CPU</h2>
-            <div class="control-unit">
-                <h2>制御装置</h2>
-                <div id="b_programCounter" class="register">プログラムカウンタ: <span id="b_pcValue">0</span></div>
-                <div id="b_instructionRegister" class="register">命令レジスタ: <span id="b_irValue"></span></div>
-                <div class="register phase-indicator">フェーズ: <span id="b_phaseValue">-</span></div>
-                <div class="register decoded-info">デコード結果: <span id="b_decodedValue">-</span></div>
-            </div>
-
-            <div class="alu-container">
-                <h2>演算装置</h2>
-                <div id="b_registerB" class="register">レジスタB（加算する値）: <span id="b_valueB">0</span></div>
-                <div id="b_registerC" class="register">レジスタC（累積結果）: <span id="b_valueC">0</span></div>
-                <div id="b_registerD" class="register">レジスタD（ループ用カウンタ）: <span id="b_valueD">0</span></div>
-                <div id="b_alu" class="alu">ALU <br>（算術論理演算装置）: <span id="b_result">0</span></div>
-                <p class="alu-note">※ ALUは加算などの演算を行うときだけ使われます。ACC（Cへ累積）とDEC（1減らす）はALUを使いますが、READ／WRITEはメモリとレジスタの間でデータを転送するだけなのでALUは使いません。</p>
-            </div>
-        </div>
-
-        <div id="b_memory" class="memory-box">
-            <h2>主記憶装置(メモリ)</h2>
-            <h3>命令格納領域</h3>
-            <div class="memory-cell"><span class="address">0</span><span class="instruction">READ D, 101</span></div>
-            <div class="memory-cell"><span class="address">1</span><span class="instruction">READ B, 100</span></div>
-            <div class="memory-cell"><span class="address">2</span><span class="instruction">ACC B</span></div>
-            <div class="memory-cell"><span class="address">3</span><span class="instruction">DEC D</span></div>
-            <div class="memory-cell"><span class="address">4</span><span class="instruction">JNZ D, 2</span></div>
-            <div class="memory-cell"><span class="address">5</span><span class="instruction">WRITE C, 102</span></div>
-            <div class="memory-cell"><span class="address">6</span><span class="instruction">STOP</span></div>
-
-            <h3>データ格納領域（2進数入力）</h3>
-            <div id="b_dataInput100" class="data-input">
-                <span>100</span><input type="text" id="b_mem100" value="10">
-                <span style="width:auto;font-weight:normal;font-size:0.85em;color:#555;">← 加算する値(B)</span>
-            </div>
-            <div id="b_dataInput101" class="data-input">
-                <span>101</span><input type="text" id="b_mem101" value="11">
-                <span style="width:auto;font-weight:normal;font-size:0.85em;color:#555;">← 繰り返し回数(D)</span>
-            </div>
-            <div id="b_dataInput102" class="data-input">
-                <span>102</span><span class="mem-out" id="b_mem102">0</span>
-            </div>
-        </div>
+    <p class="say" id="say" aria-live="polite"></p>
+    <div class="controls">
+      <button class="btn primary" id="btnStep">次へ ▶</button>
+      <button class="btn" id="btnInst">1命令まとめて ▶▶</button>
+      <button class="btn" id="btnPlay">自動で実行</button>
+      <button class="btn" id="btnReset">最初から</button>
+      <label class="speed" for="speed">ゆっくり <input type="range" id="speed" min="1" max="5" step="1" value="2"> はやい</label>
     </div>
+  </section>
 
-    <div class="button-container">
-        <button class="step-btn" onclick="stopPlay(); simB.next();">処理を1つずつ実行</button>
-        <button class="step-btn" onclick="stopPlay(); simB.reset();">初期化</button>
+  <div class="bottom">
+    <section class="panel" aria-label="集計">
+      <h2>CPUとメモリのやりとり</h2>
+      <dl class="stats">
+        <div><dt>実行した命令</dt><dd><span id="sInst">0</span><small> 個</small></dd></div>
+        <div class="memstat"><dt>メモリとのやりとり</dt><dd><span id="sMem">0</span><small> 回</small></dd></div>
+        <div><dt>うち命令の読み出し</dt><dd><span id="sFetch">0</span><small> 回</small></dd></div>
+        <div><dt>うちデータの読み書き</dt><dd><span id="sData">0</span><small> 回</small></dd></div>
+      </dl>
+      <div class="wait"><p id="waitText"></p></div>
+      <h2>考えてみよう</h2>
+      <ol class="think" id="think"></ol>
+    </section>
+    <section class="panel" aria-label="実行の記録">
+      <h2>実行の記録</h2>
+      <div class="trace-wrap">
+        <table class="trace">
+          <thead><tr><th>#</th><th>番地</th><th>命令</th><th>実行後のレジスタ</th><th>次のPC</th></tr></thead>
+          <tbody id="trace"></tbody>
+        </table>
+      </div>
+    </section>
+  </div>
+
+  <div class="next">
+    <p><b>ふりかえり</b>　命令を1つ実行するたびに、CPUは必ずメモリへ命令を取りに行きます。メモリはCPUよりずっと遅いので、キャッシュに命令やデータを置いておくことが大切です。</p>
+    <div class="links">
+      <a class="sub" href="memory-race.html#cache">② キャッシュのしくみを見直す</a>
+      <a href="index.html">シリーズのトップへ</a>
     </div>
-</div>
+  </div>
 
-<!-- ================= 発展編2（割り算） ================= -->
-<div id="c_panel" class="tab-panel" hidden>
-    <p class="panel-note">※ 割り算には「JGE（比較して以上ならジャンプ）」「SUBR（引き算した値でレジスタ自身を上書き）」「INC（レジスタを1増やす）」という命令を使います。考え方は「余りが割る数以上である間、引き算を繰り返し、引けた回数を数える」というものです（筆算の代わりに、コンピュータは引き算の繰り返しで割り算をしています）。なお、SUB（基本編）は2つのレジスタの値をCという別のレジスタへ書き出す方式でしたが、このSUBRは1つ目のレジスタ自身を更新する方式です。実際のCPUの命令にも、この2つの書き方（別のレジスタに結果を出す方式／自分自身を更新する方式）の両方が存在します。</p>
-    <div class="simulation">
-        <div class="cpu-box">
-            <h2>CPU</h2>
-            <div class="control-unit">
-                <h2>制御装置</h2>
-                <div id="c_programCounter" class="register">プログラムカウンタ: <span id="c_pcValue">0</span></div>
-                <div id="c_instructionRegister" class="register">命令レジスタ: <span id="c_irValue"></span></div>
-                <div class="register phase-indicator">フェーズ: <span id="c_phaseValue">-</span></div>
-                <div class="register decoded-info">デコード結果: <span id="c_decodedValue">-</span></div>
-            </div>
-
-            <div class="alu-container">
-                <h2>演算装置</h2>
-                <div id="c_registerR" class="register">レジスタR（被除数→余り）: <span id="c_valueR">0</span></div>
-                <div id="c_registerB" class="register">レジスタB（除数）: <span id="c_valueB">0</span></div>
-                <div id="c_registerQ" class="register">レジスタQ（商）: <span id="c_valueQ">0</span></div>
-                <div id="c_alu" class="alu">ALU <br>（算術論理演算装置）: <span id="c_result">0</span></div>
-                <p class="alu-note">※ ALUは減算（SUBR）・加算（INC）・比較（JGE）を行うときだけ使われます。READ／WRITEはメモリとレジスタの間でデータを転送するだけなのでALUは使いません。</p>
-            </div>
-        </div>
-
-        <div id="c_memory" class="memory-box">
-            <h2>主記憶装置(メモリ)</h2>
-            <h3>命令格納領域</h3>
-            <div class="memory-cell"><span class="address">0</span><span class="instruction">READ R, 100</span></div>
-            <div class="memory-cell"><span class="address">1</span><span class="instruction">READ B, 101</span></div>
-            <div class="memory-cell"><span class="address">2</span><span class="instruction">SUBR R, B</span></div>
-            <div class="memory-cell"><span class="address">3</span><span class="instruction">INC Q</span></div>
-            <div class="memory-cell"><span class="address">4</span><span class="instruction">JGE R, B, 2</span></div>
-            <div class="memory-cell"><span class="address">5</span><span class="instruction">WRITE Q, 102</span></div>
-            <div class="memory-cell"><span class="address">6</span><span class="instruction">WRITE R, 103</span></div>
-            <div class="memory-cell"><span class="address">7</span><span class="instruction">STOP</span></div>
-
-            <h3>データ格納領域（2進数入力）</h3>
-            <div id="c_dataInput100" class="data-input">
-                <span>100</span><input type="text" id="c_mem100" value="1101">
-                <span style="width:auto;font-weight:normal;font-size:0.85em;color:#555;">← 被除数</span>
-            </div>
-            <div id="c_dataInput101" class="data-input">
-                <span>101</span><input type="text" id="c_mem101" value="100">
-                <span style="width:auto;font-weight:normal;font-size:0.85em;color:#555;">← 除数</span>
-            </div>
-            <div id="c_dataInput102" class="data-input">
-                <span>102</span><span class="mem-out" id="c_mem102">0</span>
-                <span style="width:auto;font-weight:normal;font-size:0.85em;color:#555;">← 商</span>
-            </div>
-            <div id="c_dataInput103" class="data-input">
-                <span>103</span><span class="mem-out" id="c_mem103">0</span>
-                <span style="width:auto;font-weight:normal;font-size:0.85em;color:#555;">← 余り</span>
-            </div>
-        </div>
-    </div>
-
-    <div class="button-container">
-        <button class="step-btn" onclick="stopPlay(); simC.next();">処理を1つずつ実行</button>
-        <button class="step-btn" onclick="stopPlay(); simC.reset();">初期化</button>
-    </div>
+  <footer>
+    <p>※ わかりやすくするため、命令は文字（ニーモニック）で表示していますが、実際は命令も2進数（機械語）でメモリに入っています。このシミュレーションでは、引き算の答えがマイナスになるときは0にしています。待ち時間は「CPUの1回の処理＝1秒」とした目安（メインメモリ1回＝CPU約400回分）で、キャッシュがない場合として計算しています。</p>
+  </footer>
 </div>
 
 <script>
-// ============================================================
-// タブ切り替え
-// ============================================================
-let currentSim = null; // 「連続実行」が対象にするシミュレータ（表示中のタブ）
+(function () {
+  'use strict';
+  const $ = (id) => document.getElementById(id);
+  const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  const MEM_COST = 400;    // メインメモリ1回 ＝ CPUの約400回分（速さくらべと同じ値）
+  const LOOP_LIMIT = 80;  // 無限ループ対策
 
-function showTab(which) {
-    stopPlay();
-    document.getElementById('a_panel').hidden = (which !== 'a');
-    document.getElementById('b_panel').hidden = (which !== 'b');
-    document.getElementById('c_panel').hidden = (which !== 'c');
-    document.getElementById('tabBtnA').classList.toggle('active', which === 'a');
-    document.getElementById('tabBtnB').classList.toggle('active', which === 'b');
-    document.getElementById('tabBtnC').classList.toggle('active', which === 'c');
-    currentSim = (which === 'a') ? simA : (which === 'b') ? simB : simC;
-}
-
-// ============================================================
-// 連続実行（速度スケール＋開始/停止）
-// ============================================================
-let playTimer = null;
-
-function onSpeedChange() {
-    const ms = document.getElementById('speedRange').value;
-    document.getElementById('speedLabel').innerText = ms + 'ms/ステップ';
-    if (playTimer) { // 再生中なら新しい速度で再スタート
-        stopPlay(true);
-        startPlay();
+  /* ---------------- レベル（プログラム） ---------------- */
+  const LEVELS = [
+    {
+      id: 'l1', title: 'レベル1', sub: '足し算・引き算',
+      summary: '100番地と101番地の数を読み込んで計算し、答えを102番地に書き込みます。2番地の命令は ADD（足し算）と SUB（引き算）を選べます。',
+      prog: ['READ A, 100', 'READ B, 101', { select: ['ADD A, B', 'SUB A, B'] }, 'WRITE C, 102', 'STOP'],
+      regs: [['A', '1つ目の数'], ['B', '2つ目の数'], ['C', '計算結果']],
+      data: [{ a: 100, role: '1つ目の数（Aへ）', init: '1010' }, { a: 101, role: '2つ目の数（Bへ）', init: '101' }, { a: 102, role: '答え（Cから）' }],
+      think: [
+        '2番地を ADD から SUB に変えると、102番地の答えはどう変わる？',
+        'プログラムが終わるまでに、メモリとのやりとりは何回あった？ そのうちデータの読み書きは何回？',
+        'ALUを使った命令はどれ？ 使わなかった命令はどれ？'
+      ]
+    },
+    {
+      id: 'l2', title: 'レベル2', sub: '掛け算（くり返し）',
+      summary: '「Bを D回 足す」ことで B×D を計算します。4番地の JNZ 命令がPCを2番地に書きかえることで、同じ命令がくり返されます。',
+      prog: ['READ D, 101', 'READ B, 100', 'ACC B', 'DEC D', 'JNZ D, 2', 'WRITE C, 102', 'STOP'],
+      regs: [['B', '足す数'], ['C', '合計'], ['D', 'のこりの回数']],
+      data: [{ a: 100, role: '足す数（Bへ）', init: '10' }, { a: 101, role: '回数（Dへ）', init: '11' }, { a: 102, role: '答え（Cから）' }],
+      think: [
+        'JNZ命令でPCが書きかわるのは、どんなとき？ 記録の色のついた行に注目しよう。',
+        '回数を 11（3回）から 101（5回）にすると、2〜4番地の命令は何回くり返される？ メモリとのやりとりはどれだけ増える？',
+        'コンピュータが掛け算を「足し算のくり返し」で計算できるのはなぜだろう？'
+      ]
+    },
+    {
+      id: 'l3', title: 'レベル3', sub: '割り算（比較とくり返し）',
+      summary: '割られる数Rから割る数Bを引けるだけ引き、引いた回数Qを数えます。Qが商、最後に残ったRが余りです。4番地の JGE 命令で「まだ引けるか」を比べます。',
+      prog: ['READ R, 100', 'READ B, 101', 'SUBR R, B', 'INC Q', 'JGE R, B, 2', 'WRITE Q, 102', 'WRITE R, 103', 'STOP'],
+      regs: [['R', '割られる数→余り'], ['B', '割る数'], ['Q', '商（引いた回数）']],
+      data: [{ a: 100, role: '割られる数（Rへ）', init: '1101' }, { a: 101, role: '割る数（Bへ）', init: '100' }, { a: 102, role: '商（Qから）' }, { a: 103, role: '余り（Rから）' }],
+      think: [
+        '13÷4（1101 ÷ 100）の商と余りを確かめよう。',
+        '割られる数が割る数より小さいとき（たとえば 11 ÷ 100）、結果は正しくなる？ ならないなら、プログラムのどこに問題があるだろう？',
+        '割る数を 0 にするとどうなる？ 実際のコンピュータでも、0で割らないように気をつける理由を考えよう。'
+      ]
     }
-}
+  ];
 
-function togglePlay() {
-    if (playTimer) { stopPlay(); } else { startPlay(); }
-}
+  /* ---------------- 状態 ---------------- */
+  let L = LEVELS[0];
+  let S = null;
+  let busy = false;
+  let playing = false;
 
-function startPlay() {
-    if (!currentSim || playTimer) return;
-    const delay = parseInt(document.getElementById('speedRange').value, 10);
-    document.getElementById('playBtn').innerText = '■ 停止';
-    playTimer = setInterval(() => {
-        if (!currentSim) { stopPlay(); return; }
-        currentSim.next(true);
-        if (currentSim.isDone()) { stopPlay(); }
-    }, delay);
-}
+  function freshState() {
+    const regs = {};
+    L.regs.forEach(([r]) => { regs[r] = 0; });
+    return { pc: 0, ir: '', irAddr: null, regs, out: {}, queue: [], halted: false, started: false,
+             stats: { inst: 0, fetch: 0, data: 0 }, trace: [], err: null };
+  }
 
-function stopPlay(keepLabel) {
-    if (playTimer) { clearInterval(playTimer); playTimer = null; }
-    if (!keepLabel) { document.getElementById('playBtn').innerText = '▶ 連続実行'; }
-}
+  /* ---------------- 表示 ---------------- */
+  const bin = (v) => (v >>> 0).toString(2);
+  const showDec = () => $('optDec').checked;
+  const numHTML = (v) => `${bin(v)}<span class="dec">（10進数で${v}）</span>`;
 
-// ============================================================
-// 命令のデコード（オペコード＋オペランドの意味を日本語で表示）
-// ============================================================
-function decodeInstruction(text) {
-    const parts = text.split(/\s+(.+)/);
-    const opcode = parts[0];
-    const operands = parts[1] ? parts[1].split(',').map(s => s.trim()) : [];
+  function instText(i) {
+    const p = L.prog[i];
+    if (typeof p === 'string') return p;
+    const sel = document.getElementById('sel' + i);
+    return sel ? sel.value : p.select[0];
+  }
+  function parse(text) {
+    const m = text.trim().split(/\s+/);
+    const op = m[0];
+    const args = text.trim().slice(op.length).split(',').map((s) => s.trim()).filter(Boolean);
+    return { op, args };
+  }
+  const OPS = {
+    READ:  { name: '読み込み',   mean: (a) => `${a[1]}番地の値をレジスタ${a[0]}へ読み込む` },
+    WRITE: { name: '書き込み',   mean: (a) => `レジスタ${a[0]}の値を${a[1]}番地へ書き込む` },
+    ADD:   { name: '足し算',     mean: (a) => `${a[0]}＋${a[1]} を計算してCへ入れる` },
+    SUB:   { name: '引き算',     mean: (a) => `${a[0]}－${a[1]} を計算してCへ入れる` },
+    ACC:   { name: '足し込み',   mean: (a) => `C＋${a[0]} を計算してCへ入れる` },
+    DEC:   { name: '1減らす',    mean: (a) => `${a[0]}から1を引く` },
+    INC:   { name: '1増やす',    mean: (a) => `${a[0]}に1を足す` },
+    SUBR:  { name: '引き算（上書き）', mean: (a) => `${a[0]}－${a[1]} を計算して${a[0]}へ入れる` },
+    JNZ:   { name: '0でなければジャンプ', mean: (a) => `${a[0]}が0でなければ${a[1]}番地へもどる` },
+    JGE:   { name: '以上ならジャンプ', mean: (a) => `${a[0]}≧${a[1]} なら${a[2]}番地へもどる` },
+    STOP:  { name: '停止',       mean: () => 'プログラムを終わる' }
+  };
+  const meaning = (text) => { const { op, args } = parse(text); return OPS[op] ? OPS[op].mean(args) : ''; };
 
-    switch (opcode) {
-        case 'READ':
-            return `オペコード：READ（読み込み） ／ 意味：アドレス${operands[1]}の値 → レジスタ${operands[0]}`;
-        case 'ADD':
-            return `オペコード：ADD（加算） ／ 意味：レジスタ${operands[0]} + レジスタ${operands[1]} → レジスタC`;
-        case 'ACC':
-            return `オペコード：ACC（累積加算） ／ 意味：レジスタC + レジスタ${operands[0]} → レジスタC（Cを更新）`;
-        case 'SUB':
-            return `オペコード：SUB（減算） ／ 意味：レジスタ${operands[0]} − レジスタ${operands[1]} → レジスタC`;
-        case 'SUBR':
-            return `オペコード：SUBR（減算・上書き） ／ 意味：レジスタ${operands[0]} − レジスタ${operands[1]} → レジスタ${operands[0]}（${operands[0]}を更新）`;
-        case 'INC':
-            return `オペコード：INC（1増やす） ／ 意味：レジスタ${operands[0]} + 1 → レジスタ${operands[0]}`;
-        case 'JGE':
-            return `オペコード：JGE（以上ならジャンプ） ／ 意味：レジスタ${operands[0]} が レジスタ${operands[1]} 以上なら${operands[2]}番地へジャンプ（PCを書き換える）`;
-        case 'WRITE':
-            return `オペコード：WRITE（書き込み） ／ 意味：レジスタ${operands[0]}の値 → アドレス${operands[1]}`;
-        case 'DEC':
-            return `オペコード：DEC（1減らす） ／ 意味：レジスタ${operands[0]} − 1 → レジスタ${operands[0]}`;
-        case 'JNZ':
-            return `オペコード：JNZ（0でなければジャンプ） ／ 意味：レジスタ${operands[0]}が0でなければ${operands[1]}番地へジャンプ（PCを書き換える）`;
-        case 'STOP':
-            return `オペコード：STOP（停止） ／ 意味：プログラムの実行を終了`;
-        default:
-            return '';
+  function renderTabs() {
+    $('tabs').innerHTML = LEVELS.map((lv) =>
+      `<button class="tab" role="tab" aria-selected="${lv === L}" data-id="${lv.id}">${lv.title}<small>${esc(lv.sub)}</small></button>`).join('');
+  }
+  $('tabs').addEventListener('click', (e) => {
+    const b = e.target.closest('.tab');
+    if (!b) return;
+    const lv = LEVELS.find((x) => x.id === b.dataset.id);
+    if (lv && lv !== L) { stopPlay(); whenIdle(() => { L = lv; build(); }); }
+  });
+
+  function build() {
+    renderTabs();
+    $('summary').textContent = L.summary;
+    $('prog').innerHTML = L.prog.map((p, i) => {
+      const code = typeof p === 'string' ? esc(p)
+        : `<select id="sel${i}" aria-label="${i}番地の命令">${p.select.map((o) => `<option>${esc(o)}</option>`).join('')}</select>`;
+      return `<li class="cell" id="m${i}"><span class="pcm">PC ▶</span><span class="addr">${i}</span><span class="code">${code}</span><span class="mean" id="mean${i}">${esc(meaning(instText(i)))}</span></li>`;
+    }).join('');
+    L.prog.forEach((p, i) => {
+      if (typeof p !== 'string') $('sel' + i).addEventListener('change', () => { $('mean' + i).textContent = meaning(instText(i)); });
+    });
+    $('data').innerHTML = L.data.map((d) => {
+      const val = d.init !== undefined
+        ? `<input type="text" id="in${d.a}" value="${d.init}" inputmode="numeric" maxlength="8" aria-label="${d.a}番地の値（2進数）"><span class="dec" id="dec${d.a}"></span>`
+        : `<span class="out" id="out${d.a}">—</span><span class="dec" id="odec${d.a}"></span>`;
+      return `<li class="cell dcell" id="d${d.a}"><span class="pcm"></span><span class="addr">${d.a}</span><span class="dval">${val}<span class="role">${esc(d.role)}</span></span></li>`;
+    }).join('');
+    L.data.forEach((d) => {
+      if (d.init === undefined) return;
+      const inp = $('in' + d.a);
+      inp.addEventListener('input', () => { validate(inp); updateDec(); });
+    });
+    $('regs').innerHTML = L.regs.map(([r, role]) =>
+      `<div class="reg" id="reg${r}"><span class="rn">レジスタ${r}<small>${esc(role)}</small></span><span class="rv" id="v${r}"></span></div>`).join('');
+    $('think').innerHTML = L.think.map((t) => `<li>${esc(t)}</li>`).join('');
+    reset();
+  }
+
+  function validate(inp) {
+    const ok = /^[01]{1,8}$/.test(inp.value.trim());
+    inp.classList.toggle('invalid', !ok);
+    return ok;
+  }
+  function inputValue(a) { return parseInt($('in' + a).value.trim(), 2); }
+  function updateDec() {
+    L.data.forEach((d) => {
+      if (d.init !== undefined) {
+        const inp = $('in' + d.a);
+        $('dec' + d.a).textContent = validate(inp) ? `（10進数で${inputValue(d.a)}）` : '0と1だけ、8けたまで';
+      }
+    });
+  }
+
+  function render() {
+    L.prog.forEach((_, i) => $('m' + i).classList.toggle('pc', !S.halted && S.pc === i));
+    $('vPC').textContent = S.pc + ' 番地';
+    $('vIR').textContent = S.ir || '—';
+    L.regs.forEach(([r]) => { $('v' + r).innerHTML = numHTML(S.regs[r]); });
+    L.data.forEach((d) => {
+      if (d.init === undefined) {
+        const v = S.out[d.a];
+        $('out' + d.a).textContent = v === undefined ? '—' : bin(v);
+        $('odec' + d.a).textContent = v === undefined ? '' : `（10進数で${v}）`;
+      } else {
+        $('in' + d.a).disabled = S.started;
+      }
+    });
+    const st = S.stats;
+    $('sInst').textContent = st.inst;
+    $('sMem').textContent = st.fetch + st.data;
+    $('sFetch').textContent = st.fetch;
+    $('sData').textContent = st.data;
+    const m = st.fetch + st.data;
+    $('waitText').innerHTML = m === 0
+      ? 'CPUの1回の処理を「1秒」とすると、メモリとのやりとりは1回で約7分かかります（<a href="memory-race.html#wait">② 速さくらべ</a>より）。'
+      : `CPUの1回の処理を「1秒」とすると、ここまでの計算そのものは約${st.inst}秒ですが、メモリとのやりとり${m}回の待ち時間は <b>約${dur(m * MEM_COST)}</b>。CPUはほとんどの時間、メモリを待っていることになります。`;
+    renderTrace();
+    const busyNow = busy || playing;
+    $('btnStep').disabled = S.halted || busyNow;
+    $('btnInst').disabled = S.halted || busyNow;
+    $('btnPlay').disabled = S.halted && !playing;
+    $('btnPlay').textContent = playing ? '一時停止' : '自動で実行';
+    document.body.classList.toggle('hide-dec', !showDec());
+    document.body.classList.toggle('hide-mean', !$('optMean').checked);
+  }
+  function dur(s) {
+    if (s < 60) return Math.round(s) + '秒';
+    if (s < 3600) return Math.round(s / 60) + '分';
+    const h = Math.floor(s / 3600), mm = Math.round((s % 3600) / 60);
+    return h + '時間' + (mm ? mm + '分' : '');
+  }
+  function renderTrace() {
+    const tb = $('trace');
+    if (!S.trace.length) { tb.innerHTML = '<tr class="empty"><td colspan="5">命令を1つ実行し終えるごとに、ここに記録されます。</td></tr>'; return; }
+    tb.innerHTML = S.trace.map((t, k) =>
+      `<tr class="${t.jump ? 'jump' : ''}"><td class="n">${k + 1}</td><td class="n">${t.addr}</td><td class="c">${esc(t.text)}</td><td class="c">${esc(t.regs)}</td><td class="n">${t.next}${t.jump ? ' ↩' : ''}</td></tr>`).join('');
+    const wrap = tb.closest('.trace-wrap');
+    wrap.scrollTop = wrap.scrollHeight;
+  }
+
+  function setPhase(n) { [1, 2, 3].forEach((i) => $('ph' + i).classList.toggle('on', i === n)); }
+  function say(text, cls) { const el = $('say'); el.innerHTML = text; el.className = 'say' + (cls ? ' ' + cls : ''); }
+  function clearHl() { document.querySelectorAll('.hl').forEach((el) => el.classList.remove('hl')); }
+  function hl(...ids) { ids.forEach((id) => { const el = $(id); if (el) el.classList.add('hl'); }); }
+
+  /* ---------------- アニメーション ---------------- */
+  const speedMs = () => [0, 1100, 750, 480, 280, 140][+$('speed').value];
+  const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+  let fast = false;
+  function fly(fromId, toId, text, kind) {
+    const ms = fast ? Math.min(220, speedMs()) : speedMs();
+    const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    if (reduce || ms < 30) return Promise.resolve();
+    const sim = $('sim').getBoundingClientRect();
+    const a = $(fromId).getBoundingClientRect();
+    const b = $(toId).getBoundingClientRect();
+    const p = document.createElement('div');
+    p.className = 'packet ' + kind;
+    p.textContent = text;
+    $('sim').appendChild(p);
+    const x0 = a.left + a.width / 2 - sim.left, y0 = a.top + a.height / 2 - sim.top;
+    const x1 = b.left + b.width / 2 - sim.left, y1 = b.top + b.height / 2 - sim.top;
+    const anim = p.animate([
+      { transform: `translate(${x0}px, ${y0}px) translate(-50%, -50%)` },
+      { transform: `translate(${x1}px, ${y1}px) translate(-50%, -50%)` }
+    ], { duration: ms, easing: 'ease-in-out', fill: 'forwards' });
+    return anim.finished.then(() => p.remove(), () => p.remove());
+  }
+
+  /* ---------------- 1命令分のステップを組み立てる ---------------- */
+  function regsText() { return L.regs.map(([r]) => `${r}=${bin(S.regs[r])}`).join(' '); }
+
+  function enqueueInstruction() {
+    const addr = S.pc;
+    S.lastJump = false;
+    if (addr >= L.prog.length) { S.halted = true; return; }
+    const q = [];
+    q.push({ ph: 1, run: async () => {
+      hl('regPC', 'm' + addr);
+      say(`プログラムカウンタ（PC）を見ると <b>${addr}番地</b>。次はメモリの${addr}番地にある命令を実行します。`);
+    } });
+    q.push({ ph: 1, run: async () => {
+      const text = instText(addr);
+      hl('m' + addr);
+      say(`メモリの${addr}番地から命令「<code>${esc(text)}</code>」を読み出し、バスを通ってCPUへ送ります。<b>（メモリとのやりとり）</b>`);
+      await fly('m' + addr, 'regIR', text, 'inst');
+      S.ir = text; S.irAddr = addr; S.stats.fetch++;
+      hl('regIR');
+    } });
+    q.push({ ph: 1, run: async () => {
+      S.pc = addr + 1;
+      hl('regPC');
+      say(`命令を受け取ったので、PCを1つ進めて <b>${S.pc}</b> にします。次の命令の番地を先に準備しておくためです。`);
+    } });
+    q.push({ ph: 2, run: async () => {
+      const { op, args } = parse(S.ir);
+      hl('regIR', 'decode');
+      const info = OPS[op];
+      $('decode').innerHTML = `<span class="k">命令の種類</span><code>${esc(op)}</code>（${esc(info.name)}）　<span class="k">対象</span><code>${esc(args.join(', ') || 'なし')}</code><br>→ ${esc(info.mean(args))}`;
+      say(`命令レジスタの「<code>${esc(S.ir)}</code>」を解読します。「${esc(op)}」は<b>${esc(info.name)}</b>の命令で、${esc(info.mean(args))}という意味です。`);
+    } });
+    execSteps(q, addr);
+    q.push({ ph: 3, final: true, run: async () => {} });
+    S.queue = q;
+  }
+
+  function execSteps(q, addr) {
+    const { op, args } = parse(instText(addr));
+    const R = (r) => 'reg' + r;
+    const done = (jump) => { S.lastJump = !!jump; };
+    const toALU = (regs, msg) => q.push({ ph: 3, run: async () => {
+      say(msg);
+      await Promise.all(regs.map((r) => fly(R(r), 'alu', bin(S.regs[r]), 'calc')));
+      hl(...regs.map(R), 'alu');
+    } });
+    const calc = (expr, f, dest, msg) => {
+      q.push({ ph: 3, run: async () => {
+        const v = f();
+        S.alu = v;
+        $('aluExpr').textContent = expr() + ' = ' + bin(v.val);
+        hl('alu');
+        say(msg(v));
+      } });
+      if (dest) q.push({ ph: 3, run: async () => {
+        await fly('alu', R(dest), bin(S.alu.val), 'calc');
+        S.regs[dest] = S.alu.val;
+        hl(R(dest));
+        say(`計算結果 <b>${numHTML(S.alu.val)}</b> をレジスタ${dest}に入れます。`);
+      } });
+    };
+    const dec = (v) => (showDec() ? `（${v}）` : '');
+    switch (op) {
+      case 'READ': {
+        const [r, a] = args;
+        q.push({ ph: 3, run: async () => {
+          const v = inputValue(a);
+          say(`メモリの${a}番地のデータ <b>${bin(v)}</b>${dec(v)} を読み出し、バスを通ってレジスタ${r}に入れます。<b>（メモリとのやりとり）</b>`);
+          hl('d' + a);
+          await fly('d' + a, R(r), bin(v), 'data');
+          S.regs[r] = v; S.stats.data++;
+          hl(R(r)); done();
+        } });
+        break;
+      }
+      case 'WRITE': {
+        const [r, a] = args;
+        q.push({ ph: 3, run: async () => {
+          const v = S.regs[r];
+          say(`レジスタ${r}の値 <b>${bin(v)}</b>${dec(v)} を、バスを通ってメモリの${a}番地に書き込みます。<b>（メモリとのやりとり）</b>`);
+          hl(R(r));
+          await fly(R(r), 'd' + a, bin(v), 'data');
+          S.out[a] = v; S.stats.data++;
+          hl('d' + a); done();
+        } });
+        break;
+      }
+      case 'ADD': case 'SUB': {
+        const [x, y] = args;
+        const plus = op === 'ADD';
+        toALU([x, y], `レジスタ${x}と${y}の値を、計算をする装置（ALU）へ送ります。`);
+        calc(() => `${bin(S.regs[x])} ${plus ? '+' : '−'} ${bin(S.regs[y])}`,
+          () => { const raw = plus ? S.regs[x] + S.regs[y] : S.regs[x] - S.regs[y]; return { val: Math.max(raw, 0), neg: raw < 0 }; },
+          'C', (v) => `ALUで ${x}${plus ? '＋' : '－'}${y} を計算します：${bin(S.regs[x])}${dec(S.regs[x])} ${plus ? '＋' : '－'} ${bin(S.regs[y])}${dec(S.regs[y])} ＝ <b>${bin(v.val)}</b>${dec(v.val)}${v.neg ? '（マイナスになるので0にしています）' : ''}`);
+        break;
+      }
+      case 'ACC': {
+        const [y] = args;
+        toALU(['C', y], `レジスタCと${y}の値をALUへ送ります。`);
+        calc(() => `${bin(S.regs.C)} + ${bin(S.regs[y])}`, () => ({ val: S.regs.C + S.regs[y] }), 'C',
+          (v) => `ALUで C＋${y} を計算します：${bin(S.regs.C)}${dec(S.regs.C)} ＋ ${bin(S.regs[y])}${dec(S.regs[y])} ＝ <b>${bin(v.val)}</b>${dec(v.val)}`);
+        break;
+      }
+      case 'SUBR': {
+        const [x, y] = args;
+        toALU([x, y], `レジスタ${x}と${y}の値をALUへ送ります。`);
+        calc(() => `${bin(S.regs[x])} − ${bin(S.regs[y])}`,
+          () => { const raw = S.regs[x] - S.regs[y]; return { val: Math.max(raw, 0), neg: raw < 0 }; }, x,
+          (v) => `ALUで ${x}－${y} を計算します：${bin(S.regs[x])}${dec(S.regs[x])} － ${bin(S.regs[y])}${dec(S.regs[y])} ＝ <b>${bin(v.val)}</b>${dec(v.val)}${v.neg ? '（マイナスになるので0にしています）' : ''}`);
+        break;
+      }
+      case 'INC': case 'DEC': {
+        const [x] = args;
+        const up = op === 'INC';
+        toALU([x], `レジスタ${x}の値をALUへ送ります。`);
+        calc(() => `${bin(S.regs[x])} ${up ? '+' : '−'} 1`, () => ({ val: Math.max(S.regs[x] + (up ? 1 : -1), 0) }), x,
+          (v) => `ALUで ${x}${up ? '＋' : '－'}1 を計算します：${bin(S.regs[x])}${dec(S.regs[x])} ${up ? '＋' : '－'} 1 ＝ <b>${bin(v.val)}</b>${dec(v.val)}`);
+        break;
+      }
+      case 'JNZ': {
+        const [x, to] = args;
+        q.push({ ph: 3, run: async () => {
+          hl(R(x), 'alu');
+          $('aluExpr').textContent = `${bin(S.regs[x])} = 0 ?`;
+          say(`ALUで、レジスタ${x}が0かどうかを調べます。いまの${x}は <b>${bin(S.regs[x])}</b>${dec(S.regs[x])} です。`);
+        } });
+        q.push({ ph: 3, run: async () => {
+          if (S.regs[x] !== 0) {
+            S.pc = +to; hl('regPC', 'm' + to);
+            say(`${x}は0ではないので、<b>PCを ${to} に書きかえます</b>。次は${to}番地にもどり、同じ命令をくり返します。これが「くり返し（ループ）」のしくみです。`);
+            done(true);
+          } else {
+            hl('regPC');
+            say(`${x}が0になったので、PCは書きかえません。くり返しを終えて、次の${S.pc}番地へ進みます。`);
+            done(false);
+          }
+        } });
+        break;
+      }
+      case 'JGE': {
+        const [x, y, to] = args;
+        q.push({ ph: 3, run: async () => {
+          await Promise.all([fly(R(x), 'alu', bin(S.regs[x]), 'calc'), fly(R(y), 'alu', bin(S.regs[y]), 'calc')]);
+          hl(R(x), R(y), 'alu');
+          $('aluExpr').textContent = `${bin(S.regs[x])} ≥ ${bin(S.regs[y])} ?`;
+          say(`ALUで、${x}（${bin(S.regs[x])}${dec(S.regs[x])}）が ${y}（${bin(S.regs[y])}${dec(S.regs[y])}）以上かどうかを比べます。`);
+        } });
+        q.push({ ph: 3, run: async () => {
+          if (S.regs[x] >= S.regs[y]) {
+            S.pc = +to; hl('regPC', 'm' + to);
+            say(`${x}≧${y} なので、まだ引けます。<b>PCを ${to} に書きかえて</b>、${to}番地にもどります。`);
+            done(true);
+          } else {
+            hl('regPC');
+            say(`${x}＜${y} なので、もう引けません。PCは書きかえず、次の${S.pc}番地へ進みます。`);
+            done(false);
+          }
+        } });
+        break;
+      }
+      case 'STOP':
+        q.push({ ph: 3, run: async () => {
+          S.halted = true;
+          const outs = L.data.filter((d) => d.init === undefined)
+            .map((d) => `${d.a}番地に <b>${S.out[d.a] === undefined ? '（なし）' : numHTML(S.out[d.a])}</b>`).join('、');
+          say(`STOP命令なので、プログラムを終わります。結果：${outs}`, 'end');
+          done();
+        } });
+        break;
+      default:
+        q.push({ ph: 3, run: async () => { say('この命令は知りません。', 'err'); S.halted = true; } });
     }
-}
+  }
 
-// ============================================================
-// 命令ごとの「実行」フェーズの処理（全タブで共有）
-// rel: そのタブ・その命令の実行フェーズ内での相対ステップ番号（0始まり）
-// ctx: {$, clearHl, setPhase, highlightDataAddress, advance, finish, silent}
-// ============================================================
-const OPCODE_HANDLERS = {
-    READ(rel, [register, address], ctx) {
-        switch (rel) {
-            case 0:
-                ctx.clearHl();
-                ctx.setPhase("③ 実行：メモリからデータを取得");
-                ctx.highlightDataAddress(`dataInput${address}`);
-                ctx.advance(); break;
-            case 1:
-                ctx.clearHl();
-                ctx.setPhase("③ 実行：レジスタへ格納");
-                { const v = ctx.$(`mem${address}`).value.trim();
-                  ctx.$(`value${register}`).innerText = v; }
-                ctx.$(`register${register}`).classList.add("highlight");
-                ctx.finish(); break;
-        }
-    },
-    ADD(rel, [r1, r2], ctx) {
-        switch (rel) {
-            case 0:
-                ctx.clearHl();
-                ctx.setPhase(`③ 実行：レジスタ${r1}・${r2}の値をALUへ送る`);
-                ctx.$(`register${r1}`).classList.add("highlight");
-                ctx.$(`register${r2}`).classList.add("highlight");
-                ctx.advance(); break;
-            case 1:
-                ctx.clearHl();
-                ctx.setPhase("③ 実行：ALUで加算");
-                { const a = parseInt(ctx.$(`value${r1}`).innerText, 2);
-                  const b = parseInt(ctx.$(`value${r2}`).innerText, 2);
-                  ctx.$('result').innerText = (a + b).toString(2); }
-                ctx.$('alu').classList.add("highlight");
-                ctx.advance(); break;
-            case 2:
-                ctx.clearHl();
-                ctx.setPhase("③ 実行：結果をレジスタCへ格納");
-                ctx.$('valueC').innerText = ctx.$('result').innerText;
-                ctx.$('registerC').classList.add("highlight");
-                ctx.finish(); break;
-        }
-    },
-    SUB(rel, [r1, r2], ctx) {
-        switch (rel) {
-            case 0:
-                ctx.clearHl();
-                ctx.setPhase(`③ 実行：レジスタ${r1}・${r2}の値をALUへ送る`);
-                ctx.$(`register${r1}`).classList.add("highlight");
-                ctx.$(`register${r2}`).classList.add("highlight");
-                ctx.advance(); break;
-            case 1:
-                ctx.clearHl();
-                ctx.setPhase("③ 実行：ALUで減算");
-                { const a = parseInt(ctx.$(`value${r1}`).innerText, 2);
-                  const b = parseInt(ctx.$(`value${r2}`).innerText, 2);
-                  ctx.$('result').innerText = Math.max(a - b, 0).toString(2); }
-                ctx.$('alu').classList.add("highlight");
-                ctx.advance(); break;
-            case 2:
-                ctx.clearHl();
-                ctx.setPhase("③ 実行：結果をレジスタCへ格納");
-                ctx.$('valueC').innerText = ctx.$('result').innerText;
-                ctx.$('registerC').classList.add("highlight");
-                ctx.finish(); break;
-        }
-    },
-    SUBR(rel, [destReg, srcReg], ctx) {
-        switch (rel) {
-            case 0:
-                ctx.clearHl();
-                ctx.setPhase(`③ 実行：レジスタ${destReg}・${srcReg}の値をALUへ送る`);
-                ctx.$(`register${destReg}`).classList.add("highlight");
-                ctx.$(`register${srcReg}`).classList.add("highlight");
-                ctx.advance(); break;
-            case 1:
-                ctx.clearHl();
-                ctx.setPhase("③ 実行：ALUで減算");
-                { const a = parseInt(ctx.$(`value${destReg}`).innerText, 2);
-                  const b = parseInt(ctx.$(`value${srcReg}`).innerText, 2);
-                  ctx.$('result').innerText = Math.max(a - b, 0).toString(2); }
-                ctx.$('alu').classList.add("highlight");
-                ctx.advance(); break;
-            case 2:
-                ctx.clearHl();
-                ctx.setPhase(`③ 実行：結果をレジスタ${destReg}へ格納（上書き）`);
-                ctx.$(`value${destReg}`).innerText = ctx.$('result').innerText;
-                ctx.$(`register${destReg}`).classList.add("highlight");
-                ctx.finish(); break;
-        }
-    },
-    INC(rel, [register], ctx) {
-        switch (rel) {
-            case 0:
-                ctx.clearHl();
-                ctx.setPhase(`③ 実行：レジスタ${register}の値をALUへ送る`);
-                ctx.$(`register${register}`).classList.add("highlight");
-                ctx.advance(); break;
-            case 1:
-                ctx.clearHl();
-                ctx.setPhase(`③ 実行：ALUで${register}+1を計算し格納`);
-                { const v = parseInt(ctx.$(`value${register}`).innerText, 2);
-                  const nv = v + 1;
-                  ctx.$(`value${register}`).innerText = nv.toString(2);
-                  ctx.$('result').innerText = nv.toString(2); }
-                ctx.$('alu').classList.add("highlight");
-                ctx.$(`register${register}`).classList.add("highlight");
-                ctx.finish(); break;
-        }
-    },
-    JGE(rel, [regA, regB, address], ctx) {
-        switch (rel) {
-            case 0:
-                ctx.clearHl();
-                ctx.setPhase(`③ 実行：レジスタ${regA}と${regB}の値を比較`);
-                ctx.$(`register${regA}`).classList.add("highlight");
-                ctx.$(`register${regB}`).classList.add("highlight");
-                ctx.advance(); break;
-            case 1: {
-                const a = parseInt(ctx.$(`value${regA}`).innerText, 2);
-                const b = parseInt(ctx.$(`value${regB}`).innerText, 2);
-                ctx.clearHl();
-                ctx.$(`register${regA}`).classList.add("highlight");
-                ctx.$(`register${regB}`).classList.add("highlight");
-                if (a >= b) {
-                    ctx.setPhase(`③ 実行：${regA}≧${regB} → PCを${address}番地へ書き換えてジャンプ`);
-                    ctx.finish(parseInt(address, 10));
-                } else {
-                    ctx.setPhase(`③ 実行：${regA}＜${regB} → ジャンプせず次の命令へ`);
-                    ctx.finish();
-                }
-                break;
-            }
-        }
-    },
-    ACC(rel, [srcRegister], ctx) {
-        switch (rel) {
-            case 0:
-                ctx.clearHl();
-                ctx.setPhase(`③ 実行：レジスタC・${srcRegister}の値をALUへ送る`);
-                ctx.$('registerC').classList.add("highlight");
-                ctx.$(`register${srcRegister}`).classList.add("highlight");
-                ctx.advance(); break;
-            case 1:
-                ctx.clearHl();
-                ctx.setPhase("③ 実行：ALUで加算（Cに累積）");
-                { const c = parseInt(ctx.$('valueC').innerText, 2);
-                  const s = parseInt(ctx.$(`value${srcRegister}`).innerText, 2);
-                  ctx.$('result').innerText = (c + s).toString(2); }
-                ctx.$('alu').classList.add("highlight");
-                ctx.advance(); break;
-            case 2:
-                ctx.clearHl();
-                ctx.setPhase("③ 実行：更新した値をレジスタCへ格納");
-                ctx.$('valueC').innerText = ctx.$('result').innerText;
-                ctx.$('registerC').classList.add("highlight");
-                ctx.finish(); break;
-        }
-    },
-    WRITE(rel, [register, address], ctx) {
-        switch (rel) {
-            case 0:
-                ctx.clearHl();
-                ctx.setPhase("③ 実行：レジスタの値を読み出す");
-                ctx.$(`register${register}`).classList.add("highlight");
-                ctx.advance(); break;
-            case 1:
-                ctx.clearHl();
-                ctx.setPhase("③ 実行：メモリへ書き込み");
-                { const v = ctx.$(`value${register}`).innerText;
-                  ctx.$(`mem${address}`).innerText = v; }
-                ctx.highlightDataAddress(`dataInput${address}`);
-                ctx.finish(); break;
-        }
-    },
-    DEC(rel, [register], ctx) {
-        switch (rel) {
-            case 0:
-                ctx.clearHl();
-                ctx.setPhase(`③ 実行：レジスタ${register}の値をALUへ送る`);
-                ctx.$(`register${register}`).classList.add("highlight");
-                ctx.advance(); break;
-            case 1:
-                ctx.clearHl();
-                ctx.setPhase(`③ 実行：ALUで${register}−1を計算し格納`);
-                { const v = parseInt(ctx.$(`value${register}`).innerText, 2);
-                  const nv = Math.max(v - 1, 0);
-                  ctx.$(`value${register}`).innerText = nv.toString(2);
-                  ctx.$('result').innerText = nv.toString(2); }
-                ctx.$('alu').classList.add("highlight");
-                ctx.$(`register${register}`).classList.add("highlight");
-                ctx.finish(); break;
-        }
-    },
-    JNZ(rel, [register, address], ctx) {
-        switch (rel) {
-            case 0:
-                ctx.clearHl();
-                ctx.setPhase(`③ 実行：レジスタ${register}が0かどうかを確認`);
-                ctx.$(`register${register}`).classList.add("highlight");
-                ctx.advance(); break;
-            case 1: {
-                const v = parseInt(ctx.$(`value${register}`).innerText, 2);
-                ctx.clearHl();
-                ctx.$(`register${register}`).classList.add("highlight");
-                if (v !== 0) {
-                    ctx.setPhase(`③ 実行：${register}≠0 → PCを${address}番地へ書き換えてジャンプ`);
-                    ctx.finish(parseInt(address, 10));
-                } else {
-                    ctx.setPhase(`③ 実行：${register}=0 → ジャンプせず次の命令へ`);
-                    ctx.finish();
-                }
-                break;
-            }
-        }
-    },
-    STOP(rel, operands, ctx) {
-        switch (rel) {
-            case 0:
-                ctx.clearHl();
-                ctx.finish();
-                if (ctx.silent) {
-                    ctx.setPhase("③ 実行：プログラムの実行を終了（自動停止しました）");
-                } else {
-                    ctx.setPhase("③ 実行：プログラムの実行を終了");
-                    alert("プログラムが終了しました。");
-                }
-                break;
-        }
+  /* ---------------- 実行 ---------------- */
+  function inputsOk() {
+    let ok = true;
+    L.data.forEach((d) => { if (d.init !== undefined && !validate($('in' + d.a))) ok = false; });
+    if (!ok) say('データの欄には 0 と 1 だけを、8けたまで入力してください（赤くなっている欄を直そう）。', 'err');
+    return ok;
+  }
+  async function step() {
+    if (S.halted) return false;
+    if (!S.started) { if (!inputsOk()) return false; S.started = true; }
+    if (!S.queue.length) enqueueInstruction();
+    if (S.halted) { render(); return false; }
+    const s = S.queue.shift();
+    clearHl();
+    setPhase(s.ph);
+    busy = true; render();
+    try { await s.run(); } finally { busy = false; }
+    if (s.final) finishInstruction();
+    else if (!S.queue.length || S.queue[0].final) { const f = S.queue.shift(); if (f) finishInstruction(); }
+    render();
+    return !S.halted;
+  }
+  function finishInstruction() {
+    S.stats.inst++;
+    S.trace.push({ addr: S.irAddr, text: S.ir, regs: regsText(), next: S.halted ? '終了' : S.pc, jump: S.lastJump });
+    if (!S.halted && S.stats.inst >= LOOP_LIMIT) {
+      S.halted = true;
+      say(`命令を${LOOP_LIMIT}回実行しても終わらないので止めました。くり返しが終わらない「無限ループ」になっているようです。`, 'err');
     }
-};
+    if (S.halted) setPhase(0);
+  }
+  async function stepInstruction() {
+    if (S.halted) return;
+    if (!S.queue.length) { const ok = await step(); if (!ok) return; }
+    fast = true;
+    try {
+      while (S.queue.length && !S.halted) { const ok = await step(); if (!ok) break; await sleep(60); }
+    } finally { fast = false; }
+  }
 
-// ============================================================
-// シミュレータ本体（prefixごとに独立した状態を持つ）
-// instructions の各要素は 文字列 または 関数（呼び出すと現在の文字列を返す＝プルダウン対応）
-// ============================================================
-function createSimulator(prefix, instructions, registers, resetDefaults) {
-    let step = 0;
-    let subStep = 0;
-    let currentInstrText = '';
-    const $ = id => document.getElementById(prefix + id);
-    const panel = document.getElementById(prefix + 'panel');
-
-    function resolveInstr(idx) {
-        const raw = instructions[idx];
-        return (typeof raw === 'function') ? raw() : raw;
+  $('btnStep').addEventListener('click', () => step());
+  $('btnInst').addEventListener('click', () => stepInstruction());
+  $('btnReset').addEventListener('click', () => { stopPlay(); whenIdle(reset); });
+  function whenIdle(fn) {
+    if (!busy) { fn(); return; }
+    const t = setInterval(() => { if (!busy) { clearInterval(t); fn(); } }, 50);
+  }
+  $('btnPlay').addEventListener('click', () => { if (playing) stopPlay(); else play(); });
+  async function play() {
+    if (S.halted) return;
+    playing = true; render();
+    while (playing && !S.halted) {
+      const ok = await step();
+      if (!ok) break;
+      await sleep(speedMs() * 0.6 + 80);
     }
+    playing = false; render();
+  }
+  function stopPlay() { playing = false; }
+  $('optDec').addEventListener('change', render);
+  $('optMean').addEventListener('change', render);
 
-    function clearHl() {
-        panel.querySelectorAll('.highlight').forEach(el => el.classList.remove('highlight'));
-    }
-    function setPhase(text) { $('phaseValue').innerText = text; }
-    function highlightMemory(address) {
-        const cell = panel.querySelector(`.memory-box .memory-cell:nth-child(${address + 3})`);
-        if (cell) cell.classList.add('highlight');
-    }
-    function highlightDataAddress(id) {
-        clearHl();
-        const t = $(id);
-        if (t) t.classList.add('highlight');
-    }
+  function reset() {
+    S = freshState();
+    clearHl(); setPhase(0);
+    $('decode').innerHTML = '<span class="k">解読</span>—';
+    $('aluExpr').textContent = '—';
+    document.querySelectorAll('.packet').forEach((p) => p.remove());
+    updateDec();
+    say('「次へ ▶」を押すとスタートします。まずCPUは、プログラムカウンタ（PC）を見て、次に実行する命令の番地を確かめます。');
+    render();
+  }
 
-    function next(silent) {
-        const pcValueEl = $('pcValue');
-        const irValueEl = $('irValue');
-        const decodedValueEl = $('decodedValue');
-        const pcEl = $('programCounter');
-        const irEl = $('instructionRegister');
-
-        if (step >= instructions.length) {
-            if (!silent) { alert("プログラムが終了しました。"); }
-            return;
-        }
-        const currentPC = step;
-
-        // ---- 共通のフェッチ・デコード処理 ----
-        if (subStep <= 4) {
-            switch (subStep) {
-                case 0:
-                    clearHl();
-                    setPhase("① フェッチ：PCが指す命令アドレスを確認");
-                    pcEl.classList.add("highlight");
-                    subStep++; return;
-                case 1:
-                    clearHl();
-                    setPhase("① フェッチ：メモリから命令を読み出す");
-                    highlightMemory(currentPC);
-                    subStep++; return;
-                case 2:
-                    clearHl();
-                    setPhase("① フェッチ：命令レジスタ(IR)へ格納");
-                    currentInstrText = resolveInstr(currentPC);
-                    irValueEl.innerText = currentInstrText;
-                    irEl.classList.add("highlight");
-                    subStep++; return;
-                case 3:
-                    clearHl();
-                    setPhase("① フェッチ完了：PCを次の命令アドレスへ更新");
-                    pcValueEl.innerText = currentPC + 1;
-                    pcEl.classList.add("highlight");
-                    subStep++; return;
-                case 4:
-                    clearHl();
-                    setPhase("② デコード：命令を解読中");
-                    decodedValueEl.innerText = decodeInstruction(currentInstrText);
-                    irEl.classList.add("highlight");
-                    subStep++; return;
-            }
-        }
-
-        // ---- 命令ごとの実行処理 ----
-        const text = currentInstrText;
-        const parts = text.split(/\s+(.+)/);
-        const opcode = parts[0];
-        const operands = parts[1] ? parts[1].split(',').map(s => s.trim()) : [];
-        const relStep = subStep - 5;
-
-        function finish(nextIndexOverride) {
-            const n = (nextIndexOverride !== undefined) ? nextIndexOverride : currentPC + 1;
-            step = n;
-            pcValueEl.innerText = n;
-            subStep = 0;
-            decodedValueEl.innerText = '-';
-        }
-        function advance() { subStep++; }
-
-        const handler = OPCODE_HANDLERS[opcode];
-        if (handler) {
-            handler(relStep, operands, { $, clearHl, setPhase, highlightDataAddress, advance, finish, silent: !!silent });
-        }
-    }
-
-    function reset() {
-        step = 0; subStep = 0; clearHl();
-        $('pcValue').innerText = '0';
-        $('irValue').innerText = '';
-        $('phaseValue').innerText = '-';
-        $('decodedValue').innerText = '-';
-        registers.forEach(r => { $(`value${r}`).innerText = '0'; });
-        $('result').innerText = '0';
-        resetDefaults.forEach(id => { $(id).innerText = '0'; });
-    }
-
-    function isDone() { return step >= instructions.length; }
-
-    return { next, reset, isDone };
-}
-
-// ============================================================
-// 基本編（分岐なし・シーケンシャル実行のみ／2番地はADD・SUBを選択式に）
-// ============================================================
-const simA = createSimulator(
-    'a_',
-    ["READ A, 100", "READ B, 101", () => document.getElementById('a_opSelect').value, "WRITE C, 102", "STOP"],
-    ['A', 'B', 'C'],
-    ['mem102']
-);
-
-// ============================================================
-// 応用編（ループ／分岐：DEC・JNZでPCを書き換える）
-// ============================================================
-const simB = createSimulator(
-    'b_',
-    ["READ D, 101", "READ B, 100", "ACC B", "DEC D", "JNZ D, 2", "WRITE C, 102", "STOP"],
-    ['B', 'C', 'D'],
-    ['mem102']
-);
-
-// ============================================================
-// 発展編2（割り算：繰り返し引き算＋比較分岐でR÷Bの商Qと余りRを求める）
-// ============================================================
-const simC = createSimulator(
-    'c_',
-    ["READ R, 100", "READ B, 101", "SUBR R, B", "INC Q", "JGE R, B, 2", "WRITE Q, 102", "WRITE R, 103", "STOP"],
-    ['R', 'B', 'Q'],
-    ['mem102', 'mem103']
-);
-
-// 初期タブ（基本編）を連続実行の対象に設定
-currentSim = simA;
+  window.CPUSIM_DEBUG = { state: () => S, level: (i) => { L = LEVELS[i]; build(); } };
+  build();
+})();
 </script>
 </body>
 </html>
